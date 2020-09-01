@@ -1,3 +1,11 @@
+# Data
+data/
+
+# Unwanted source files and libraries
+src/ikrlib.py
+ivec_extr/
+kaldi/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
