@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 
 import numpy as np
-from librosa import load, feature
+import python_speech_features as psf
+from librosa import load
 from glob import glob
 
 # Paths to librispeech
@@ -15,16 +16,27 @@ TEST_OTHER = 'data/LibriSpeech/test-other/'
 def flac16khz2mfcc(directory):
     features = {}
     for f in glob(directory + '/*.flac'):
-        x, sr = load(f, sr = 160000)
-        n_fft = int(sr * 0.02) # 20 ms window
-        hop_len = n_fft // 2
-
-        #TODO n_mfcc
-        mfccs = feature.mfcc(x, sr=sr, n_mfcc=20, hop_length=hop_len, n_fft=n_fft)
+        x, sr = load(f, sr=160000)
+        mfccs = psf.base.mfcc(x, numcep=20, nfilt=40, winfunc=np.hamming)
         print(mfccs.shape)
         features[f] = mfccs
 
     return features
 
+# Loads all flac files from a specified directory and extracts log Mel-filterbank energies
+# (40 dimensions)
+def flac16khz2lmfbank(directory): 
+    features = {}
+    for f in glob(directory + '/*.flac'):
+        x, sr = load(f, sr=160000)
+
+        # NOTE: fiddle with the nfft param?
+        lmfbs = psf.base.logfbank(x, nfilt=40)
+        print(lmfbs.shape)
+        features[f] = lmfbs
+
+    return features
+
 if __name__ == '__main__':
-    flac16khz2mfcc('data/LibriSpeech/dev-clean/1272/128104/')
+    #flac16khz2mfcc('data/LibriSpeech/dev-clean/1272/128104/')
+    flac16khz2lmfbank('data/LibriSpeech/dev-clean/1272/128104/')
