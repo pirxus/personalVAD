@@ -6,6 +6,9 @@ src/ikrlib.py
 ivec_extr/
 kaldi/
 
+# Trash...
+file_list
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
