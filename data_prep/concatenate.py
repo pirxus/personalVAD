@@ -15,7 +15,7 @@ def parse_transcriptions(path):
     for line in f.readlines():
         name = line.split(' ')[0]
         full_path = directory + name + '.flac'
-        text = line.partition(' ')[2][:-1]
+        text = line.partition(' ')[2]
         transcripts.append((full_path, name, text)) # store the transcript in the list
 
     f.close()
@@ -81,7 +81,7 @@ def generate_concatenations(dataset, dest, n=1300):
             x, sr = sf.read(utterance[0])
             data = np.append(data, x)
             file_name += utterance[1] + '_'
-            transcript += utterance[2] + ' '
+            transcript += utterance[2]
 
         file_name = file_name[:-1]
         transcript = transcript[:-1] + '\n' # don't forget the newline
