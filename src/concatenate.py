@@ -12,7 +12,7 @@ from glob import glob
 
 ALIGNED = True
 MPROCESS = True
-N = 20000
+N = 16
 
 
 # This function creates a list that contains tuples of the paths to the utterances
@@ -95,7 +95,6 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300):
             utterances.append(random.choice(speaker[1]))
 
         data = np.array([])
-        sr = 16000
         file_name = ''
         transcript = ''
         alignment = ''
@@ -107,6 +106,7 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300):
             prev_end_stamp = 0
             for utterance in utterances:
                 x, sr = sf.read(utterance[0])
+                assert (sr == 16000), f'Invalid source audio sample rate {sr}'
                 stamps = utterance[3].split(',')
                 x, end_stamp = trim_utt_end(x, sr, stamps)
                 data = np.append(data, x)
@@ -121,6 +121,7 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300):
                     tstamps = stamps
 
                 prev_end_stamp += end_stamp
+                tstamps[-1] = str(round(prev_end_stamp))
 
                 file_name += utterance[1] + '_'
                 transcript += utterance[2] + '$'
@@ -135,6 +136,7 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300):
             # transcription
             for utterance in utterances:
                 x, sr = sf.read(utterance[0])
+                assert (sr == 16000), f'Invalid source audio sample rate {sr}'
                 data = np.append(data, x)
                 file_name += utterance[1] + '_'
                 transcript += utterance[2]
@@ -143,7 +145,7 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300):
             transcript = transcript[:-1]
 
         # save the new file and transcription
-        sf.write(cur_dir + file_name + '.flac', data, sr)
+        sf.write(cur_dir + file_name + '.flac', data, sr=16000)
         with open(cur_dir + file_name + '.txt', 'w') as txt:
             if ALIGNED == True: txt.write(transcript + ' ' + alignment + '\n')
             else: txt.write(transcript + '\n')
@@ -174,7 +176,7 @@ if __name__ == '__main__':
         try:
             os.mkdir(dest)
         except OSError:
-            print('Could not create destination directory %s' % dest)
+            print(f'Could not create destination directory {dest}')
 
     # generate the dataset - TODO: multiprocessing
     if MPROCESS == True:

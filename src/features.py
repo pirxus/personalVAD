@@ -31,9 +31,9 @@ def flac16khz2lmfbank(directory):
         x, sr = load(f, sr=160000)
 
         # NOTE: fiddle with the nfft param?
-        lmfbs = psf.base.logfbank(x, nfilt=40)
+        fbanks, energy = psf.base.fbank(x, sr, nfilt=40, winfunc=np.hamming)
         print(lmfbs.shape)
-        features[f] = lmfbs
+        features[f] = np.log(fbanks)
 
     return features
 
