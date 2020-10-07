@@ -54,7 +54,7 @@ def load_dataset_structure(root_dir):
                             transcripts.extend(
                                     parse_alignments(f))
 
-                        #NOTE: I ended up using the alignment files only, since currently
+                        # NOTE: I ended up using the alignment files only, since currently
                         # they are all I need and contain all the information from the
                         # original transcript files.
 

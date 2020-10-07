@@ -56,7 +56,7 @@ with os.scandir(DATA) as folders:
             n = logfbanks.shape[0]
             labels = np.zeros(n, dtype=np.int8)
             j = 0 # current index to the gtruth/tstamps array
-            for i in range(n): #TODO: SLOW!!!! think of something better...
+            for i in range(n): # TODO: SLOW!!!! think of something better...
                 if i * 10 > tstamps[j]: j += 1
                 # set the label, 1==speech frame, 0==non-speech frame
                 labels[i] = 0 if gtruth[j] in ['', '$'] else 1
