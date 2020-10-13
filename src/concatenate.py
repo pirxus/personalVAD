@@ -12,7 +12,7 @@ from glob import glob
 
 ALIGNED = True
 MPROCESS = True
-N = 16
+N = 20000 # The number of generated utterances
 
 
 # This function creates a list that contains tuples of the paths to the utterances
@@ -145,7 +145,7 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300):
             transcript = transcript[:-1]
 
         # save the new file and transcription
-        sf.write(cur_dir + file_name + '.flac', data, sr=16000)
+        sf.write(cur_dir + file_name + '.flac', data, 16000)
         with open(cur_dir + file_name + '.txt', 'w') as txt:
             if ALIGNED == True: txt.write(transcript + ' ' + alignment + '\n')
             else: txt.write(transcript + '\n')

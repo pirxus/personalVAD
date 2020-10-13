@@ -10,7 +10,7 @@ import os
 import sys
 from glob import glob
 
-num_epochs = 20
+num_epochs = 5
 batch_size = 128
 batch_size_test = 8
 
@@ -23,7 +23,6 @@ DATA_TRAIN = '../data/features/train'
 DATA_TEST = '../data/features/test'
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-
 
 class SpeechDataset(Dataset):
     """Concatenated LibriSpeech uterrance dataset."""
@@ -94,6 +93,7 @@ test_loader = DataLoader(
 model = Net(input_dim, hidden_dim, num_layers).to(device)
 criterion = nn.BCELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.1)
 
 # Train!!! hype!!!
 for epoch in range(num_epochs):
@@ -108,6 +108,7 @@ for epoch in range(num_epochs):
         for j in range(out_padded.size(0)):
             loss = criterion(out_padded[j][:y_lens[j]], torch.unsqueeze(y_padded[j][:y_lens[j]], 1))
             batch_loss += loss
+        batch_loss /= batch_size
         batch_loss.backward()
         optimizer.step()
         optimizer.zero_grad()
@@ -115,34 +116,24 @@ for epoch in range(num_epochs):
         if batch % 10 == 0:
             print(f'Batch: {batch}, loss = {batch_loss.item():.4f}')
 
-        # test on the training data (NOTE looking for overfitting..)
-        if batch % 50 == 0:
-            n_correct = 0
-            n_samples = 0
+    scheduler.step() # learning rate adjust
+
+    # Test the model after each epoch
+    with torch.no_grad():
+        print("testing...")
+        n_correct = 0
+        n_samples = 0
+        for x_padded, y_padded, x_lens, y_lens in test_loader:
+            x_packed = pack_padded_sequence(
+                    x_padded, x_lens, batch_first=True, enforce_sorted=False).to(device)
+            out_padded = model(x_packed)
+            y_padded = y_padded.to(device)
+
             # value, index
             for j in range(out_padded.size(0)):
-                _, predictions = torch.max(out_padded[j][:y_lens[j]], 1)
+                predictions = (out_padded[j][:y_lens[j]] > 0.5).float().cuda()
                 n_samples += y_lens[j]
-                n_correct += (predictions == y_padded[j][:y_lens[j]]).sum().item()
+                n_correct += torch.sum(predictions.squeeze() == y_padded[j][:y_lens[j]]).item()
 
-            acc = 100.0 * n_correct / n_samples
-            print(f"accuracy = {acc}")
-
-# Test now
-with torch.no_grad():
-    n_correct = 0
-    n_samples = 0
-    for x_padded, y_padded, x_lens, y_lens in test_loader:
-        x_packed = pack_padded_sequence(
-                x_padded, x_lens, batch_first=True, enforce_sorted=False).to(device)
-        out_padded = model(x_packed)
-        y_padded = y_padded.to(device)
-
-        # value, index
-        for j in range(out_padded.size(0)):
-            _, predictions = torch.max(out_padded[j][:y_lens[j]], 1)
-            n_samples += y_lens[j]
-            n_correct += (predictions == y_padded[j][:y_lens[j]]).sum().item()
-
-    acc = 100.0 * n_correct / n_samples
-    print(f"accuracy = {acc}")
+        acc = 100.0 * n_correct / n_samples
+        print(f"accuracy = {acc:.2f}")

@@ -49,18 +49,24 @@ with os.scandir(DATA) as folders:
             line = txt.readline(); txt.close()
             gtruth = line.partition(' ')[0].split(',')
             tstamps = [int(float(stamp)*1000) for stamp in line.split(' ')[1:]]
+            gt_len = len(gtruth)
+            assert (gt_len == len(tstamps)), f"gtruth and tstamps arrays have to be the same"
 
             # now generate n ground truth labels based on the gtruth and tstamps labels
             # where n is the number of feature frames we extracted
-            # NOTE: the timestamp doesn't really match the value of n. Keep an eye out..
             n = logfbanks.shape[0]
-            labels = np.zeros(n, dtype=np.int8)
+
+            # NOTE: the timestamp doesn't really match the value of n. Keep an eye out..
+            if tstamps[-1] < n*10:
+                tstamps[-1] = n * 10
+
+            labels = np.ones(n)
             j = 0 # current index to the gtruth/tstamps array
             for i in range(n): # TODO: SLOW!!!! think of something better...
                 if i * 10 > tstamps[j]: j += 1
+                assert (j < gt_len), f"j={j} out of range {gt_len}"
                 # set the label, 1==speech frame, 0==non-speech frame
-                labels[i] = 0 if gtruth[j] in ['', '$'] else 1
-                i += 1
+                if gtruth[j] in ['', '$']: labels[i] = 0
 
             with open(DEST + folder.name + '/' + utt_id + '.fea', 'wb') as f:
                 pickle.dump((logfbanks, labels), f)
