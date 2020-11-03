@@ -11,8 +11,8 @@ import numpy as np
 from glob import glob
 
 ALIGNED = True
-MPROCESS = True
-N = 20000 # The number of generated utterances
+MPROCESS = False
+N = 4000 # The number of generated utterances
 
 
 # This function creates a list that contains tuples of the paths to the utterances
@@ -75,16 +75,21 @@ def trim_utt_end(x, sr, tstamps):
     return x, end_stamp
 
 
-def generate_concatenations(dataset, dest, proc_name='', n=1300):
+def generate_concatenations(dataset, dest, proc_name='', n=1300, wav_scp=None, utt2spk=None):
     if proc_name != '':
         print(f'process {proc_name} starting...')
+
+    if wav_scp == None or utt2spk == None:
+        # TODO: create the wav.scp file for multiprocessing cases...
+        print("Wav.scp and utt2spk files have to be created for concatenations to be generated")
+        sys.exit(2)
 
     iteration = 0 # split files into directories by 1000
     cur_dir = ''
     while iteration < n:
         if iteration % 1000 == 0:
             # create a new destination subdirectory
-            cur_dir = dest + proc_name + str(iteration) + '/'
+            cur_dir = dest + proc_name + str(iteration // 1000) + '_concat' + '/'
             os.mkdir(cur_dir)
 
         # now randomly select the number of speaker utterances that are to be concatenated
@@ -151,6 +156,9 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300):
             else: txt.write(transcript + '\n')
             txt.close()
             iteration += 1
+        # and write an entry to our wav.scp and utt2spk files
+        wav_scp.write(file_name + ' flac -d -c -s ' + cur_dir + file_name + '.flac |\n')
+        utt2spk.write(file_name + ' ' + file_name + '\n')
 
 if __name__ == '__main__':
 
@@ -165,20 +173,26 @@ if __name__ == '__main__':
         dest = sys.argv[2]
         if root[-1] != '/': root += '/'
         if dest[-1] != '/': dest += '/'
+        # check if the destination path is an absolute path
+        if not os.path.isabs(dest):
+            print("The destination folder path has to be specified as absolute")
+            sys.exit(1)
 
     dataset = load_dataset_structure(root)
 
     # now create the destination directory
     if os.path.exists(dest):
-        print('The specified destination folder is an existing file/directory')
-        sys.exit()
+        if not os.path.isdir(dest) or os.listdir(dest):
+            print('The specified destination folder is an existing file/directory')
+            sys.exit()
     else:
         try:
             os.mkdir(dest)
         except OSError:
             print(f'Could not create destination directory {dest}')
+            sys.exit(1)
 
-    # generate the dataset - TODO: multiprocessing
+    # generate the dataset - TODO: multiprocessing and wav.scp
     if MPROCESS == True:
         gen1 = Process(target=generate_concatenations, args=(dataset, dest, 'a', N/4,))
         gen2 = Process(target=generate_concatenations, args=(dataset, dest, 'b', N/4,))
@@ -186,4 +200,9 @@ if __name__ == '__main__':
         gen4 = Process(target=generate_concatenations, args=(dataset, dest, 'd', N/4,))
         gen1.start(); gen2.start(); gen3.start(); gen4.start()
     else:
-        generate_concatenations(dataset, dest, n=N)
+
+        # create the wav.scp file
+        with open(dest + 'wav.scp', 'w') as wav_scp, open(dest + 'utt2spk', 'w') as utt2spk:
+            # and generate our dataset
+            generate_concatenations(dataset, dest, n=N, wav_scp=wav_scp, utt2spk=utt2spk)
+
