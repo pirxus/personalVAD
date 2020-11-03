@@ -1,5 +1,6 @@
 # Data
 data/
+src/models/
 
 # Unwanted source files and libraries
 src/ikrlib.py
