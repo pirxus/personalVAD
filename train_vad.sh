@@ -1,2 +1,2 @@
 #!/bin/bash
-python src/vad.py
+python src/old_vad.py
