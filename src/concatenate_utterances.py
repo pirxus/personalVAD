@@ -75,7 +75,8 @@ def trim_utt_end(x, sr, tstamps):
     return x, end_stamp
 
 
-def generate_concatenations(dataset, dest, proc_name='', n=1300, wav_scp=None, utt2spk=None):
+def generate_concatenations(dataset, dest, proc_name='', n=1300,
+        wav_scp=None, utt2spk=None, text=None):
     if proc_name != '':
         print(f'process {proc_name} starting...')
 
@@ -151,20 +152,22 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300, wav_scp=None, u
 
         # save the new file and transcription
         sf.write(cur_dir + file_name + '.flac', data, 16000)
-        with open(cur_dir + file_name + '.txt', 'w') as txt:
-            if ALIGNED == True: txt.write(transcript + ' ' + alignment + '\n')
+        with open(cur_dir + file_name + '.txt', 'w') as txt: #TODO: throw away?
+            if ALIGNED: txt.write(transcript + ' ' + alignment + '\n')
             else: txt.write(transcript + '\n')
             txt.close()
             iteration += 1
-        # and write an entry to our wav.scp and utt2spk files
+
+        # and write an entry to our wav.scp, utt2spk and text files
         wav_scp.write(file_name + ' flac -d -c -s ' + cur_dir + file_name + '.flac |\n')
         utt2spk.write(file_name + ' ' + file_name + '\n')
+        if ALIGNED: text.write(file_name + ' ' + transcript + ' ' + alignment + '\n')
 
 if __name__ == '__main__':
 
     if len(sys.argv) != 3:
         print("Incorrect number of parameters for the concatenation script")
-        print("Please specify the path (i.e. ~/data/LibriSpeech/dev-clean) to")
+        print("Please specify the path (i.e. data/LibriSpeech/dev-clean) to")
         print("the dataset's root direcotory as the first parameter and the name")
         print("of the destination folder that will contain the generated utterances.")
         sys.exit(0)
@@ -202,7 +205,8 @@ if __name__ == '__main__':
     else:
 
         # create the wav.scp file
-        with open(dest + 'wav.scp', 'w') as wav_scp, open(dest + 'utt2spk', 'w') as utt2spk:
+        with open(dest + 'wav.scp', 'w') as wav_scp, open(dest + 'utt2spk', 'w') as utt2spk,
+             open(dext + 'text', 'w') as text:
             # and generate our dataset
-            generate_concatenations(dataset, dest, n=N, wav_scp=wav_scp, utt2spk=utt2spk)
+            generate_concatenations(dataset, dest, n=N, wav_scp=wav_scp, utt2spk=utt2spk, text=text)
 
