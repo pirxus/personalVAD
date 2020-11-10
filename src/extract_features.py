@@ -52,7 +52,7 @@ def features_from_flac():
                 x, sr = sf.read(f)
                 assert (sr == 16000), f'Invalid source audio sample rate {sr}'
                 fbanks, energy = psf.base.fbank(x, nfilt=40, winfunc=np.hamming)
-                logfbanks = np.log(fbanks)
+                logfbanks = np.log10(fbanks)
 
                 # now load the transcription and the alignment timestamps
                 with open(folder.path + '/' + utt_id + '.txt') as txt:

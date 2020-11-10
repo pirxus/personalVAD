@@ -4,6 +4,7 @@ import sys
 import os
 from multiprocessing import Process
 import time
+import re
 import random
 import math
 import soundfile as sf
@@ -12,7 +13,9 @@ from glob import glob
 
 ALIGNED = True
 MPROCESS = False
-N = 4000 # The number of generated utterances
+KEEP_TEXT = False
+N = 500 # The number of generated utterances
+FILES_PER_DIR = 250
 
 
 # This function creates a list that contains tuples of the paths to the utterances
@@ -27,6 +30,10 @@ def parse_alignments(path):
         full_path = directory + name + '.flac'
         aligned_text = line.split(' ')[1][1:-1]
         tstamps = line.split(' ')[2][1:-2] # without the newline..
+
+        # throw away the actual words if not needed...
+        if not KEEP_TEXT:
+            aligned_text = re.sub(r'[A-Z]+', 'W', aligned_text)
 
         # store the aligned transcript in the list
         transcripts.append((full_path, name, aligned_text, tstamps))
@@ -87,10 +94,10 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300,
 
     iteration = 0 # split files into directories by 1000
     cur_dir = ''
-    while iteration < n:
-        if iteration % 1000 == 0:
+    for iteration in range(n):
+        if iteration % FILES_PER_DIR == 0:
             # create a new destination subdirectory
-            cur_dir = dest + proc_name + str(iteration // 1000) + '_concat' + '/'
+            cur_dir = dest + proc_name + str(iteration // FILES_PER_DIR) + '_concat' + '/'
             os.mkdir(cur_dir)
 
         # now randomly select the number of speaker utterances that are to be concatenated
@@ -152,11 +159,9 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300,
 
         # save the new file and transcription
         sf.write(cur_dir + file_name + '.flac', data, 16000)
-        with open(cur_dir + file_name + '.txt', 'w') as txt: #TODO: throw away?
-            if ALIGNED: txt.write(transcript + ' ' + alignment + '\n')
-            else: txt.write(transcript + '\n')
-            txt.close()
-            iteration += 1
+        #with open(cur_dir + file_name + '.txt', 'w') as txt: #TODO: throw away?
+        #    if ALIGNED: txt.write(transcript + ' ' + alignment + '\n')
+        #    else: txt.write(transcript + '\n')
 
         # and write an entry to our wav.scp, utt2spk and text files
         wav_scp.write(file_name + ' flac -d -c -s ' + cur_dir + file_name + '.flac |\n')
@@ -205,8 +210,7 @@ if __name__ == '__main__':
     else:
 
         # create the wav.scp file
-        with open(dest + 'wav.scp', 'w') as wav_scp, open(dest + 'utt2spk', 'w') as utt2spk,
-             open(dext + 'text', 'w') as text:
+        with open(dest + 'wav.scp', 'w') as wav_scp, open(dest + 'utt2spk', 'w') as utt2spk, open(dest + 'text', 'w') as text:
             # and generate our dataset
             generate_concatenations(dataset, dest, n=N, wav_scp=wav_scp, utt2spk=utt2spk, text=text)
 
