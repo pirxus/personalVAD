@@ -33,7 +33,7 @@ lr = 1e-2
 
 DATA_TRAIN = 'data/features/train'
 DATA_TEST = 'data/features/test'
-MODEL_PATH = 'src/models/vad.pt'
+MODEL_PATH = 'src/models/vad_et.pt'
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 

@@ -16,7 +16,7 @@ from extract_features import replace_zero_sequences
 DATA = 'data/concat/'
 DEST = 'data/features/'
 TEXT = 'data/concat/text'
-LIBRI_SOURCE = 'data/LibriSpeech/dev-clean/'
+LIBRI_SOURCE = 'data/LibriSpeech/train-clean-100/'
 
 # feature extraction mode based on the target architecture
 class Mode(Enum):
@@ -85,7 +85,12 @@ def features_from_flac(text):
                 logfbanks = np.log10(fbanks)
 
                 # now load the transcription and the alignment timestamps
-                gtruth, tstamps = text[utt_id]
+                try:
+                    gtruth, tstamps = text[utt_id]
+                except:
+                    print(f"Error: key {utt_id} not found.")
+                    continue
+
                 gt_len = len(gtruth)
                 assert (gt_len == tstamps.size), f"gtruth and tstamps arrays have to be the same"
 
@@ -126,7 +131,7 @@ def features_from_flac(text):
                     which = np.random.randint(0, n_speakers) 
                     spk_embed = get_speaker_embedding(utt_id, which, encoder)
 
-                    # now relabel the ground truths to three classes... (tss, ntss, ns)
+                    # now relabel the ground truths to three classes... (tss, ntss, ns) -> {0, 1, 2}
                     labels = np.ones(n, dtype=np.long)
                     stamp_prev = 0
                     tstamps = tstamps // 10

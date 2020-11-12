@@ -13,21 +13,22 @@ green=`tput setaf 2`
 reset=`tput sgr0`
 
 if [ -e $1 ]; then
-  stage=5
+  echo "Please specifiy the data preparation stage."
+  exit 0
 else
   stage=$1
 fi
 
-repo_root=/home/prix/Devel/bp/personalVAD
-concat_dir=/home/pirx/Devel/bp/personalVAD/kaldi/egs/pvad/data/clean
-kaldi_root=/home/pirx/Devel/bp/personalVAD/kaldi/egs/pvad
+repo_root=/home/pirx/Devel/bp/personalVAD
+concat_dir=$repo_root/kaldi/egs/pvad/data/clean
+kaldi_root=$repo_root/kaldi/egs/pvad
 
 
 if [ $stage -le 0 ]; then
 
   # generate the concatenations
   echo "${green}Generating concatenated utterances...${reset}"
-  python src/concatenate_utterances.py data/LibriSpeech/dev-clean $concat_dir
+  python src/concatenate_utterances.py data/LibriSpeech/train-clean-100 $concat_dir
 
 fi
 
@@ -52,7 +53,9 @@ if [ $stage -le 2 ]; then
 
   # reverberate the data and extract log mel-filterbank features
   ./data_prep.sh
-  cd ../../../
+  cd ../../../data/concat
+  cat text_flac >> text
+
 
 fi
 

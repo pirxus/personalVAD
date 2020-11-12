@@ -14,8 +14,8 @@ from glob import glob
 ALIGNED = True
 MPROCESS = False
 KEEP_TEXT = False
-N = 500 # The number of generated utterances
-FILES_PER_DIR = 250
+N = 6000 # The number of generated utterances
+FILES_PER_DIR = 1000
 
 
 # This function creates a list that contains tuples of the paths to the utterances
