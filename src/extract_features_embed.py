@@ -29,6 +29,19 @@ class Mode(Enum):
 MODE = Mode.ET
 
 def get_speaker_embedding(utt_id, spk_idx, encoder, n_wavs=2):
+    """ Computes a d-vector speaker embedding for a target speaker.
+    Args:
+        utt_id (str): The whole concatenated utterance id.
+        spk_idx (int): Which speaker from that utterance id is our target.
+        encoder (resemblyzer.VoiceEncoder): Speaker encoder object that allows us to extract
+            the speaker embedding.
+        n_wavs (int, optional): Number of audio utterances used to calculate the embedding.
+
+    Returns:
+        numpy.ndarray: The extracted speaker embedding
+
+    """
+
     # first remove the augmentation prefix...
     if 'rev' in utt_id:
         utt_id = utt_id.partition('-')[2]
@@ -46,9 +59,19 @@ def get_speaker_embedding(utt_id, spk_idx, encoder, n_wavs=2):
     return encoder.embed_speaker(wavs)
 
 def features_from_flac(text):
-    encoder = VoiceEncoder()
+    """This function goes through the entire audio dataset specified by `DATA` and creates
+    a new dataset of extracted features for a vad architecture specified in the `MODE` parameter.
+
+    Args:
+        text (file):
+    """
+
+    if MODE != Mode.VAD:
+        encoder = VoiceEncoder()
+
     with os.scandir(DATA) as folders:
         for folder in folders:
+            if not os.path.isdir(folder.path): continue
             print(f'Entering folder {folder.name}')
             os.mkdir(DEST + folder.name)
 
@@ -104,21 +127,21 @@ def features_from_flac(text):
                     spk_embed = get_speaker_embedding(utt_id, which, encoder)
 
                     # now relabel the ground truths to three classes... (tss, ntss, ns)
-                    labels = np.ones((n, 3))
+                    labels = np.ones(n, dtype=np.long)
                     stamp_prev = 0
                     tstamps = tstamps // 10
 
                     for (stamp, label) in zip(tstamps, gtruth):
                         if label == '':
-                            labels[stamp_prev:stamp] = [0, 0, 1]
+                            labels[stamp_prev:stamp] = 2
                         elif label == '$':
                             which -= 1;
-                            labels[stamp_prev:stamp] = [0, 0, 1]
+                            labels[stamp_prev:stamp] = 2
                         else:
                             if which == 0: # tss
-                                labels[stamp_prev:stamp] = [1, 0, 0]
-                            else: # ntss
-                                labels[stamp_prev:stamp] = [0, 1, 0]
+                                labels[stamp_prev:stamp] = 0
+                            #else: # ntss
+                                #labels[stamp_prev:stamp] = 1
 
                         stamp_prev = stamp
 
