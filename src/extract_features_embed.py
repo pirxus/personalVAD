@@ -1,10 +1,9 @@
 import numpy as np
 import os
-import io
 from enum import Enum
 import sys
 import pickle
-import shlex, subprocess
+import random
 import soundfile as sf
 import python_speech_features as psf
 from glob import glob
@@ -17,6 +16,9 @@ DATA = 'data/concat/'
 DEST = 'data/features/'
 TEXT = 'data/concat/text'
 LIBRI_SOURCE = 'data/LibriSpeech/train-clean-100/'
+TS_DROPOUT = True
+CACHE_DVECTORS = True
+embedding_cache = dict()
 
 # feature extraction mode based on the target architecture
 class Mode(Enum):
@@ -28,14 +30,20 @@ class Mode(Enum):
 
 MODE = Mode.ET
 
-def get_speaker_embedding(utt_id, spk_idx, encoder, n_wavs=2):
-    """ Computes a d-vector speaker embedding for a target speaker.
+def get_speaker_embedding(utt_id, spk_idx, encoder, n_wavs=2, use_cache=True):
+    """Computes a d-vector speaker embedding for a target speaker and saves it to the 
+    embedding_cache dictionary. If an embedding for our target is already present there, then
+    that d-vector is returned instead.
+
     Args:
         utt_id (str): The whole concatenated utterance id.
         spk_idx (int): Which speaker from that utterance id is our target.
         encoder (resemblyzer.VoiceEncoder): Speaker encoder object that allows us to extract
             the speaker embedding.
         n_wavs (int, optional): Number of audio utterances used to calculate the embedding.
+            Defaults to 2.
+        use_caceh(bool, optional): Tells the function whether to cache the extracted embeddings
+            or not. Defaults to True.
 
     Returns:
         numpy.ndarray: The extracted speaker embedding
@@ -49,14 +57,24 @@ def get_speaker_embedding(utt_id, spk_idx, encoder, n_wavs=2):
     # get the speaker id
     spk_id = utt_id.split('_')[spk_idx].split('-')
 
-    # now, compute the speaker embedding from a few audio files in their librispeech folder..
-    files = glob(LIBRI_SOURCE + spk_id[0] + '/' + spk_id[1] + '/*.flac')
-    wavs = list()
-    for i in range(n_wavs):
-        random_file = np.random.randint(0, n_wavs)
-        wavs.append(preprocess_wav(sf.read(files[random_file])[0]))
+    # check whether the embedding is already present in the embedding cache
+    if use_cache and spk_id[0] in embedding_cache:
+        embedding = embedding_cache[spk_id[0]]
 
-    return encoder.embed_speaker(wavs)
+    else:
+
+        # compute the speaker embedding from a few audio files in their librispeech folder..
+        files = glob(LIBRI_SOURCE + spk_id[0] + '/' + spk_id[1] + '/*.flac')
+        wavs = list()
+        for i in range(n_wavs):
+            random_file = np.random.randint(0, n_wavs)
+            wavs.append(preprocess_wav(sf.read(files[random_file])[0]))
+
+        embedding = encoder.embed_speaker(wavs)
+        # cache the d-vector
+        if use_cache: embedding_cache[spk_id[0]] = embedding
+
+    return embedding
 
 def features_from_flac(text):
     """This function goes through the entire audio dataset specified by `DATA` and creates
@@ -128,8 +146,27 @@ def features_from_flac(text):
                     #_, embeds, wav_slices = encoder.embed_utterance(wav, return_partials=True)
                     # choose a speaker at random
                     n_speakers = gtruth.count('$') + 1
-                    which = np.random.randint(0, n_speakers) 
-                    spk_embed = get_speaker_embedding(utt_id, which, encoder)
+
+                    # now, based on TS_DROPOUT, decide with a certain probability, whether to 
+                    # make a one speaker utterance without a target speaker to mitigate
+                    # overfitting for the target speaker class
+                    if TS_DROPOUT and n_speakers == 1 and CACHE_DVECTORS:
+                        if use_target := bool(np.random.randint(0, 2)) or embedding_cache == {}:
+                            # target speaker
+                            which = 0
+                            spk_embed = get_speaker_embedding(utt_id, which, encoder)
+
+                        else:
+                            # get a random speaker embedding ?? other than the current one ??
+                            if 'rev' in utt_id: spk_id = utt_id.partition('-')[2]
+                            spk_id = utt_id.split('-')[0]
+                            rnd_spk_id, spk_embed = random.choice(list(embedding_cache.items()))
+                            which = -1 if rnd_spk_id != spk_id else 0
+
+                    else:
+                        which = np.random.randint(0, n_speakers) 
+                        spk_embed = get_speaker_embedding(utt_id, which, encoder,
+                                use_cache=CACHE_DVECTORS)
 
                     # now relabel the ground truths to three classes... (tss, ntss, ns) -> {0, 1, 2}
                     labels = np.ones(n, dtype=np.long)
