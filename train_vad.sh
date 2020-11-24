@@ -20,3 +20,13 @@ if [[ $arch == "et" ]]; then
   echo "Beginning training the ET vad architecture."
   python src/vad_et.py
 fi
+
+if [[ $arch == "st" ]]; then
+  echo "Beginning training the ST vad architecture."
+  python src/vad_st.py
+fi
+
+if [[ $arch == "set" ]]; then
+  echo "Beginning training the SET vad architecture."
+  python src/vad_set.py
+fi

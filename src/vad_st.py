@@ -1,8 +1,9 @@
-"""@package vad_et
+"""@package vad_st
 
-This module implements the ET vad architecture from {paper_link}. The input for this architecture
-consists of a 296-dimensional feature vector of which 40 values are our extracted logfbank
-energies and the other 256 values is the target speaker embedding d-vector.
+This module implements the ST vad architecture from {paper_link}. The input for this architecture
+consists of a 41-dimensional feature vector of which 40 values are our extracted logfbank
+energies and the other one feature is the speaker verification score for that particular frame.
+TODO: maybe interpolate the speaker verification scores?
 
 """
 
@@ -23,9 +24,9 @@ from vad import pad_collate
 # model hyper parameters
 num_epochs = 5
 batch_size = 64
-batch_size_test = 8
+batch_size_test = 32
 
-input_dim = 296
+input_dim = 41
 hidden_dim = 64
 out_dim = 3
 num_layers = 2
@@ -33,13 +34,13 @@ lr = 1e-3
 
 DATA_TRAIN = 'data/features/train'
 DATA_TEST = 'data/features/test'
-MODEL_PATH = 'src/models/vad_et.pt'
+MODEL_PATH = 'src/models/vad_st.pt'
 SCHEDULER = False
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-class VadETDataset(Dataset):
-    """VadET training dataset."""
+class VadSTDataset(Dataset):
+    """VadST training dataset."""
 
     def __init__(self, root_dir):
         """Initializes the dataset object and loads the paths to the feature files into
@@ -64,11 +65,11 @@ class VadETDataset(Dataset):
     def __getitem__(self, index):
         with np.load(self.file_list[index]) as f:
             x = f['x']
-            embed = f['embed']
+            scores = f['scores']
             y = f['y']
 
-            # add the dvector array to the feature vector
-            x = np.hstack((x, np.full((x.shape[0], 256), embed)))
+            # add the speaker verification scores array to the feature vector
+            x = np.hstack((x, np.expand_dims(scores, 1)))
 
             x = torch.from_numpy(x).float()
             y = torch.from_numpy(y)
@@ -77,9 +78,9 @@ class VadETDataset(Dataset):
         return None
 
 # TODO: implement the WPL loss function
-class VadET(nn.Module):
+class VadST(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_layers, out_dim):
-        super(VadET, self).__init__()
+        super(VadST, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.out_dim = out_dim
@@ -96,18 +97,19 @@ class VadET(nn.Module):
 
 if __name__ == '__main__':
     # Load the data and create DataLoader instances
-    train_data = VadETDataset(DATA_TRAIN)
-    test_data = VadETDataset(DATA_TEST)
+    train_data = VadSTDataset(DATA_TRAIN)
+    test_data = VadSTDataset(DATA_TEST)
     train_loader = DataLoader(
             dataset=train_data, batch_size=batch_size, shuffle=True, collate_fn=pad_collate)
     test_loader = DataLoader(
             dataset=test_data, batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
-    model = VadET(input_dim, hidden_dim, num_layers, out_dim).to(device)
+    model = VadST(input_dim, hidden_dim, num_layers, out_dim).to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     if SCHEDULER:
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.1)
+
 
     # Train!!! hype!!!
     for epoch in range(num_epochs):

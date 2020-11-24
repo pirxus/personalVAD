@@ -7,28 +7,32 @@ import random
 import soundfile as sf
 import python_speech_features as psf
 from glob import glob
-from resemblyzer import VoiceEncoder, preprocess_wav
+from resemblyzer import VoiceEncoder, preprocess_wav, normalize_volume
 
 from extract_features import replace_zero_sequences
 
 # Path to the dataset
 DATA = 'data/concat/'
 DEST = 'data/features/'
-TEXT = 'data/concat/text'
+TEXT = 'data/concat/text' # ground truth annotations for each utterance
 LIBRI_SOURCE = 'data/LibriSpeech/train-clean-100/'
-TS_DROPOUT = True
-CACHE_DVECTORS = True
+TS_DROPOUT = False
+CACHE_DVECTORS = False
 embedding_cache = dict()
 
 # feature extraction mode based on the target architecture
 class Mode(Enum):
     VAD = 0
     SC = 1
-    ST = 2
-    ET = 3
+    ET = 2
+    ST = 3
     SET = 4
 
-MODE = Mode.ET
+MODE = Mode.ST
+
+def cos(a, b):
+    """Computes the cosine similarity of two vectors"""
+    return np.dot(a, b) / (np.sqrt(np.dot(a, a)) * np.sqrt(np.dot(b, b)))
 
 def get_speaker_embedding(utt_id, spk_idx, encoder, n_wavs=2, use_cache=True):
     """Computes a d-vector speaker embedding for a target speaker and saves it to the 
@@ -75,6 +79,13 @@ def get_speaker_embedding(utt_id, spk_idx, encoder, n_wavs=2, use_cache=True):
         if use_cache: embedding_cache[spk_id[0]] = embedding
 
     return embedding
+
+def preprocess_wav (wav):
+    """ Applies preprocessing operations to a waveform either on disk or in memory such that  
+    The waveform will be resampled to match the data hyperparameters.
+    """
+    wav = normalize_volume(wav, -30, increase_only=True)
+    return wav
 
 def features_from_flac(text):
     """This function goes through the entire audio dataset specified by `DATA` and creates
@@ -130,21 +141,22 @@ def features_from_flac(text):
                         if label in ['', '$']: labels[stamp_prev:stamp] = 0
                         stamp_prev = stamp
 
+                    # TODO save as numpy file...
                     with open(DEST + folder.name + '/' + utt_id + '.vad.fea', 'wb') as f:
                         pickle.dump((logfbanks, replace_zero_sequences(labels, 8)), f)
 
+                # the baseline - combine speaker verification score and vad output
                 elif MODE == Mode.SC:
                     pass #TODO
-                elif MODE == Mode.ST:
-                    pass #TODO
 
-                # target embedding vad
-                elif MODE == Mode.ET:
+                # score based training
+                elif MODE == Mode.ST or MODE == Mode.ET or MODE == Mode.SET:
+                    # we need to extract partial embeddings for each utterance - each representing
+                    # a certain time window. Then those embeddings are compared with the target
+                    # speaker embedding via cosine similarity and this score is then used as
+                    # a feature.
 
-                    # now onto d-vector extraction...
-                    #wav = preprocess_wav(f, source_sr=sr)
-                    #_, embeds, wav_slices = encoder.embed_utterance(wav, return_partials=True)
-                    # choose a speaker at random
+                    # randomly select a target speaker and compute his embedding
                     n_speakers = gtruth.count('$') + 1
 
                     # now, based on TS_DROPOUT, decide with a certain probability, whether to 
@@ -168,30 +180,53 @@ def features_from_flac(text):
                         spk_embed = get_speaker_embedding(utt_id, which, encoder,
                                 use_cache=CACHE_DVECTORS)
 
-                    # now relabel the ground truths to three classes... (tss, ntss, ns) -> {0, 1, 2}
+                    # get the partial utterances for the current utterance, but bypas the
+                    # resemblyzer's wav_preprocess function - we don't want any vad preprocessing
+                    rate = 3
+                    x = preprocess_wav(x)
+                    _, utt_embeds, slices = encoder.embed_utterance(x, return_partials=True,
+                            rate=rate, min_coverage=0.5)
+
+                    # compute the cosine similarity between the partial embeddings and the target
+                    # speaker embedding
+                    scores_raw = np.array([ cos(spk_embed, cur_embed) for cur_embed in utt_embeds ])
+
+                    # span the extracted scores to the whole utterance length
+                    # - the first 160 frames are the first score as the embedding is computed from
+                    #   a 1.6s long window
+                    # - all the other scores have frame_step frames between them
+                    samples_per_frame = 160
+                    frame_step = int(np.round((16000 / rate) / samples_per_frame))
+                    scores = np.append(np.kron(scores_raw[0], np.ones(160, dtype=scores_raw.dtype)),
+                        np.kron(scores_raw, np.ones(frame_step, dtype=scores_raw.dtype)))
+                    assert scores.size >= logfbanks.shape[0],\
+                        "Error: The score array was longer than the actual feature vector."
+
+                    # trim the score vector to be the same length as the acoustic features
+                    scores = scores[:logfbanks.shape[0]]
+
+                    # now relabel the ground truths to three classes... (ns, ntss, tss) -> {0, 1, 2}
                     labels = np.ones(n, dtype=np.long)
                     stamp_prev = 0
                     tstamps = tstamps // 10
 
                     for (stamp, label) in zip(tstamps, gtruth):
                         if label == '':
-                            labels[stamp_prev:stamp] = 2
+                            labels[stamp_prev:stamp] = 0
                         elif label == '$':
                             which -= 1;
-                            labels[stamp_prev:stamp] = 2
+                            labels[stamp_prev:stamp] = 0
                         else:
                             if which == 0: # tss
-                                labels[stamp_prev:stamp] = 0
-                            #else: # ntss
+                                labels[stamp_prev:stamp] = 2
+                            #else: # ntss - no need to label, the array is already filled with ones
                                 #labels[stamp_prev:stamp] = 1
 
                         stamp_prev = stamp
 
-                    with open(DEST + folder.name + '/' + utt_id + '.et_vad.fea', 'wb') as f:
-                        pickle.dump((logfbanks, spk_embed, labels), f)
-
-                elif MODE == Mode.SET:
-                    pass #TODO
+                    # save the extracted features
+                    np.savez(DEST + folder.name + '/' + utt_id + '.pvad.fea',
+                            x=logfbanks, scores=scores, embed=spk_embed, y=labels)
 
 
 # first create the destination directory
