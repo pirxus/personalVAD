@@ -13,7 +13,7 @@ from extract_features import replace_zero_sequences
 
 # Path to the dataset
 DATA = 'data/concat/'
-DEST = 'data/features_hello/'
+DEST = 'data/features/'
 TEXT = 'data/concat/text' # ground truth annotations for each utterance
 LIBRI_SOURCE = 'data/LibriSpeech/train-clean-100/'
 TS_DROPOUT = False
@@ -178,7 +178,8 @@ def features_from_flac(text):
                     # make a one speaker utterance without a target speaker to mitigate
                     # overfitting for the target speaker class
                     if TS_DROPOUT and n_speakers == 1 and CACHE_DVECTORS:
-                        if use_target := bool(np.random.randint(0, 2)) or embedding_cache == {}:
+                        use_target = bool(np.random.randint(0, 2))
+                        if use_target or embedding_cache == {}:
                             # target speaker
                             which = 0
                             spk_embed = get_speaker_embedding(utt_id, which, encoder)
