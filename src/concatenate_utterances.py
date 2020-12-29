@@ -14,7 +14,7 @@ from glob import glob
 ALIGNED = True
 MPROCESS = False
 KEEP_TEXT = False
-N = 6000 # The number of generated utterances
+N = 30000 # The number of generated utterances
 FILES_PER_DIR = 1000
 
 
@@ -210,7 +210,9 @@ if __name__ == '__main__':
     else:
 
         # create the wav.scp file
-        with open(dest + 'wav.scp', 'w') as wav_scp, open(dest + 'utt2spk', 'w') as utt2spk, open(dest + 'text', 'w') as text:
+        with open(dest + 'wav.scp', 'w') as wav_scp, \
+             open(dest + 'utt2spk', 'w') as utt2spk, \
+             open(dest + 'text', 'w') as text:
             # and generate our dataset
             generate_concatenations(dataset, dest, n=N, wav_scp=wav_scp, utt2spk=utt2spk, text=text)
 

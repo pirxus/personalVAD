@@ -55,8 +55,6 @@ if [ $stage -le 2 ]; then
   ./data_prep.sh
   cd ../../../data/concat
   cat text_flac >> text
-
-
 fi
 
 

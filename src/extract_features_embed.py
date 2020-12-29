@@ -13,11 +13,18 @@ from extract_features import replace_zero_sequences
 
 # Path to the dataset
 DATA = 'data/concat/'
-DEST = 'data/features/'
+DEST = 'data/features_hello/'
 TEXT = 'data/concat/text' # ground truth annotations for each utterance
 LIBRI_SOURCE = 'data/LibriSpeech/train-clean-100/'
 TS_DROPOUT = False
 CACHE_DVECTORS = False
+
+# indicates whether the speaker embeddings are derived from the dataset
+# or whether they are pre-generated and stored in the EMBED_PATH folder and should be pulled
+# from there...
+GEN_SPK_EMBEDDINGS = False
+EMBED_PATH =  'data/embeddings/'
+
 embedding_cache = dict()
 
 # feature extraction mode based on the target architecture
@@ -28,7 +35,7 @@ class Mode(Enum):
     ST = 3
     SET = 4
 
-MODE = Mode.ST
+MODE = Mode.VAD # set the feature extraction mode
 
 def cos(a, b):
     """Computes the cosine similarity of two vectors"""
@@ -61,22 +68,30 @@ def get_speaker_embedding(utt_id, spk_idx, encoder, n_wavs=2, use_cache=True):
     # get the speaker id
     spk_id = utt_id.split('_')[spk_idx].split('-')
 
-    # check whether the embedding is already present in the embedding cache
-    if use_cache and spk_id[0] in embedding_cache:
-        embedding = embedding_cache[spk_id[0]]
+    if GEN_SPK_EMBEDDINGS:
 
+        # check whether the embedding is already present in the embedding cache
+        if use_cache and spk_id[0] in embedding_cache:
+            embedding = embedding_cache[spk_id[0]]
+
+
+        else:
+
+            # compute the speaker embedding from a few audio files in their librispeech folder..
+            files = glob(LIBRI_SOURCE + spk_id[0] + '/' + spk_id[1] + '/*.flac')
+            n_files = len(files)
+            wavs = []
+            for i in range(n_wavs):
+                random_file = files[np.random.randint(0, n_files)]
+                wavs.append(preprocess_wav(sf.read(random_file)[0]))
+
+            embedding = encoder.embed_speaker(wavs)
+            # cache the d-vector
+            if use_cache: embedding_cache[spk_id[0]] = embedding
+
+    # simply load from the EMBED_PATH folder..
     else:
-
-        # compute the speaker embedding from a few audio files in their librispeech folder..
-        files = glob(LIBRI_SOURCE + spk_id[0] + '/' + spk_id[1] + '/*.flac')
-        wavs = list()
-        for i in range(n_wavs):
-            random_file = np.random.randint(0, n_wavs)
-            wavs.append(preprocess_wav(sf.read(files[random_file])[0]))
-
-        embedding = encoder.embed_speaker(wavs)
-        # cache the d-vector
-        if use_cache: embedding_cache[spk_id[0]] = embedding
+        embedding = np.load(EMBED_PATH + spk_id[0] + '.dvector.npy')
 
     return embedding
 
@@ -141,9 +156,9 @@ def features_from_flac(text):
                         if label in ['', '$']: labels[stamp_prev:stamp] = 0
                         stamp_prev = stamp
 
-                    # TODO save as numpy file...
-                    with open(DEST + folder.name + '/' + utt_id + '.vad.fea', 'wb') as f:
-                        pickle.dump((logfbanks, replace_zero_sequences(labels, 8)), f)
+                    # save the extracted features
+                    np.savez(DEST + folder.name + '/' + utt_id + '.vad.fea',
+                            x=logfbanks, y=replace_zero_sequences(labels, 8))
 
                 # the baseline - combine speaker verification score and vad output
                 elif MODE == Mode.SC:

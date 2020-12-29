@@ -94,6 +94,10 @@ class VadET(nn.Module):
         out_padded = self.fc(out_padded)
         return out_padded
 
+def wpl(output, target):
+    """Weighted pairwise loss.
+    """
+
 if __name__ == '__main__':
     # Load the data and create DataLoader instances
     train_data = VadETDataset(DATA_TRAIN)
