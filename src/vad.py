@@ -11,24 +11,23 @@ from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_se
 import torch.nn.functional as F
 
 import numpy as np
-import pickle
 import os
 import sys
 from glob import glob
 
 # model hyper parameters
-num_epochs = 3
+num_epochs = 1
 batch_size = 128
-batch_size_test = 8
+batch_size_test = 32
 
 input_dim = 40
 hidden_dim = 64
 num_layers = 2
 lr = 1e-2
 
-DATA_TRAIN = 'data/features/train'
-DATA_TEST = 'data/features/test'
-MODEL_PATH = 'src/models/vad.pt'
+DATA_TRAIN = 'data/train'
+DATA_TEST = 'data/test'
+MODEL_PATH = 'vad.pt'
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -49,32 +48,35 @@ class VadDataset(Dataset):
         # first load the paths to the feature files
         with os.scandir(root_dir) as folders:
             for folder in folders:
-                self.file_list.extend(glob(folder.path + '/*.fea'))
+                self.file_list.extend(glob(folder.path + '/*.vad.fea.npz'))
         self.n_utterances = len(self.file_list)
 
     def __len__(self):
         return self.n_utterances
 
     def __getitem__(self, index):
-        with open(self.file_list[index], 'rb') as f:
-            x, y = pickle.load(f) # (x, y) == (logfbanks, labels)
+        with np.load(self.file_list[index]) as f:
+            x = f['x']
+            y = f['y']
+
             x = torch.from_numpy(x).float()
             y = torch.from_numpy(y).float()
             return x, y
+
         return None
 
 class Vad(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_layers):
         super(Vad, self).__init__()
         self.hidden_dim = hidden_dim
-        self.num_layers  = num_layers
+        self.num_layers = num_layers
 
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_dim, 1)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        out_packed, _ = self.lstm(x)
+        out_packed, (h, c) = self.lstm(x)
         out_padded, out_lengths = pad_packed_sequence(out_packed, batch_first=True)
 
         out_padded = self.fc(out_padded)
@@ -148,7 +150,7 @@ if __name__ == '__main__':
             n_samples = 0
             for x_padded, y_padded, x_lens, y_lens in test_loader:
                 x_packed = pack_padded_sequence(
-                        x_padded, x_lens, batch_first=True, enforce_sorted=False).to(device)
+                        x_padded, x_lens, batch_first=True, enforce_sorted=False)
                 out_padded = model(x_packed)
                 y_padded = y_padded.to(device)
 
@@ -161,6 +163,6 @@ if __name__ == '__main__':
             acc = 100.0 * n_correct / n_samples
             print(f"accuracy = {acc:.2f}")
 
-    # Save the model
-    torch.save(model.state_dict(), MODEL_PATH)
+        # Save the model - after each epoch for ensurance...
+        torch.save(model.state_dict(), MODEL_PATH)
 
