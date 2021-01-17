@@ -16,7 +16,7 @@ import sys
 from glob import glob
 
 # model hyper parameters
-num_epochs = 1
+num_epochs = 20
 batch_size = 128
 batch_size_test = 32
 
@@ -28,6 +28,7 @@ lr = 1e-2
 DATA_TRAIN = 'data/train'
 DATA_TEST = 'data/test'
 MODEL_PATH = 'vad.pt'
+SCHEDULER = True
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -100,8 +101,8 @@ def pad_collate(batch):
     x_lens = [len(x) for x in xx]
     y_lens = [len(y) for y in yy]
 
-    xx_pad = pad_sequence(xx, batch_first=True, padding_value=0)
-    yy_pad = pad_sequence(yy, batch_first=True, padding_value=0)
+    xx_pad = pad_sequence(xx, batch_first=True, padding_value=0).to(device)
+    yy_pad = pad_sequence(yy, batch_first=True, padding_value=0).to(device)
 
     return xx_pad, yy_pad, x_lens, y_lens
 
@@ -117,7 +118,8 @@ if __name__ == '__main__':
     model = Vad(input_dim, hidden_dim, num_layers).to(device)
     criterion = nn.BCELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.1)
+    if SCHEDULER:
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.1)
 
     # Train!!! hype!!!
     for epoch in range(num_epochs):
@@ -141,7 +143,8 @@ if __name__ == '__main__':
             if batch % 10 == 0:
                 print(f'Batch: {batch}, loss = {batch_loss.item():.4f}')
 
-        scheduler.step() # learning rate adjust
+        if SCHEDULER and (epoch + 1) % 5 == 0:
+            scheduler.step() # learning rate adjust
 
         # Test the model after each epoch
         with torch.no_grad():

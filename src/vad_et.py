@@ -21,20 +21,20 @@ from glob import glob
 from vad import pad_collate
 
 # model hyper parameters
-num_epochs = 5
-batch_size = 64
-batch_size_test = 8
+num_epochs = 20
+batch_size = 128
+batch_size_test = 32
 
 input_dim = 296
 hidden_dim = 64
 out_dim = 3
 num_layers = 2
-lr = 1e-3
+lr = 1e-2
 
-DATA_TRAIN = 'data/features/train'
-DATA_TEST = 'data/features/test'
-MODEL_PATH = 'src/models/vad_et.pt'
-SCHEDULER = False
+DATA_TRAIN = 'data/train'
+DATA_TEST = 'data/test'
+MODEL_PATH = 'vad_et.pt'
+SCHEDULER = True
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -141,7 +141,11 @@ if __name__ == '__main__':
             if batch % 10 == 0:
                 print(f'Batch: {batch}, loss = {loss:.4f}')
 
-        if SCHEDULER: scheduler.step() # learning rate adjust
+        if SCHEDULER:
+            if epoch == 0:
+                scheduler.step() # learning rate adjust
+            if (epoch + 1) % 6 == 0:
+                scheduler.step() # learning rate adjust
 
         # Test the model after each epoch
         with torch.no_grad():
@@ -165,6 +169,6 @@ if __name__ == '__main__':
             acc = 100.0 * n_correct / n_samples
             print(f"accuracy = {acc:.2f}")
 
-    # Save the model
-    torch.save(model.state_dict(), MODEL_PATH)
+        # Save the model (after each epoch just to be sure...)
+        torch.save(model.state_dict(), MODEL_PATH)
 

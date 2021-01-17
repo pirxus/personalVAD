@@ -16,8 +16,8 @@ DATA = 'data/concat/'
 DEST = 'data/features/'
 TEXT = 'data/concat/text' # ground truth annotations for each utterance
 LIBRI_SOURCE = 'data/LibriSpeech/train-clean-100/'
-TS_DROPOUT = False
-CACHE_DVECTORS = False
+TS_DROPOUT = True
+CACHE_DVECTORS = True
 
 # indicates whether the speaker embeddings are derived from the dataset
 # or whether they are pre-generated and stored in the EMBED_PATH folder and should be pulled
@@ -35,7 +35,7 @@ class Mode(Enum):
     ST = 3
     SET = 4
 
-MODE = Mode.VAD # set the feature extraction mode
+MODE = Mode.ET # set the feature extraction mode
 
 def cos(a, b):
     """Computes the cosine similarity of two vectors"""
@@ -92,6 +92,7 @@ def get_speaker_embedding(utt_id, spk_idx, encoder, n_wavs=2, use_cache=True):
     # simply load from the EMBED_PATH folder..
     else:
         embedding = np.load(EMBED_PATH + spk_id[0] + '.dvector.npy')
+        if use_cache: embedding_cache[spk_id[0]] = embedding
 
     return embedding
 
@@ -178,7 +179,7 @@ def features_from_flac(text):
                     # make a one speaker utterance without a target speaker to mitigate
                     # overfitting for the target speaker class
                     if TS_DROPOUT and n_speakers == 1 and CACHE_DVECTORS:
-                        use_target = bool(np.random.randint(0, 2))
+                        use_target = bool(np.random.randint(0, 3))
                         if use_target or embedding_cache == {}:
                             # target speaker
                             which = 0
