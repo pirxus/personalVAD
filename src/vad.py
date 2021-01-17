@@ -25,9 +25,9 @@ hidden_dim = 64
 num_layers = 2
 lr = 1e-2
 
-DATA_TRAIN = 'data/train'
-DATA_TEST = 'data/test'
-MODEL_PATH = 'vad.pt'
+DATA_TRAIN = 'data/features/train'
+DATA_TEST = 'data/features/test'
+MODEL_PATH = 'src/models/vad.pt'
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -100,8 +100,8 @@ def pad_collate(batch):
     x_lens = [len(x) for x in xx]
     y_lens = [len(y) for y in yy]
 
-    xx_pad = pad_sequence(xx, batch_first=True, padding_value=0)
-    yy_pad = pad_sequence(yy, batch_first=True, padding_value=0)
+    xx_pad = pad_sequence(xx, batch_first=True, padding_value=0).to(device)
+    yy_pad = pad_sequence(yy, batch_first=True, padding_value=0).to(device)
 
     return xx_pad, yy_pad, x_lens, y_lens
 
