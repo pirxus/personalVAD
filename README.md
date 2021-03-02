@@ -2,9 +2,24 @@
 Bachelor's thesis project
 
 
+## UPDATE 15/02/2021
+- move feature extraction to kaldi
+        - create a python feature extraction script
+                - read the signal recipe from scp
+                - convert to float32
+                - extract features
+                - save the features to an ark
+- add the augmentation
+        - figure out musan
+
+- move to metacentrum
+        - TODO: maybe test kaldiio and kaldi before moving?
+
+### ============================================================
+
+
 ## CHECK CHECK CHECK
 - audio preprocessing - volume normalization
-
 
 ## TODO
 ### training

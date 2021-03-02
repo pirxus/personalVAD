@@ -14,7 +14,7 @@ from glob import glob
 ALIGNED = True
 MPROCESS = False
 KEEP_TEXT = False
-N = 30000 # The number of generated utterances
+N = 2000 # The number of generated utterances
 FILES_PER_DIR = 1000
 
 
@@ -33,7 +33,7 @@ def parse_alignments(path):
 
         # throw away the actual words if not needed...
         if not KEEP_TEXT:
-            aligned_text = re.sub(r'[A-Z]+', 'W', aligned_text)
+            aligned_text = re.sub(r"[A-Z']+", 'W', aligned_text)
 
         # store the aligned transcript in the list
         transcripts.append((full_path, name, aligned_text, tstamps))

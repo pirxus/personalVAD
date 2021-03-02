@@ -9,6 +9,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 import torch.nn.functional as F
+import kaldiio
 
 import numpy as np
 import os
@@ -16,7 +17,7 @@ import sys
 from glob import glob
 
 # model hyper parameters
-num_epochs = 1
+num_epochs = 20
 batch_size = 128
 batch_size_test = 32
 
@@ -24,12 +25,45 @@ input_dim = 40
 hidden_dim = 64
 num_layers = 2
 lr = 1e-2
+SCHEDULER = True
 
 DATA_TRAIN = 'data/features/train'
 DATA_TEST = 'data/features/test'
 MODEL_PATH = 'src/models/vad.pt'
 
+USE_KALDI = False
+DATA_TRAIN_KALDI = 'data/train'
+DATA_TEST_KALDI = 'data/test'
+CONVERT_LABELS = True # uses the ns, tss, ntss labels and converts them to the base vad labels
+
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+class VadDatasetArk(Dataset):
+    """Vad training dataset. Uses kaldi scp and ark files."""
+
+    def __init__(self, root_dir):
+        self.root_dir = root_dir if root_dir[-1] == '/' else root_dir + '/'
+        self.fbanks = kaldiio.load_scp(f'{self.root_dir}fbanks.scp')
+        if CONVERT_LABELS:
+            self.labels = kaldiio.load_scp(f'{self.root_dir}labels.scp')
+        else:
+            self.labels = kaldiio.load_scp(f'{self.root_dir}labels_vad.scp')
+        self.keys = np.array(list(self.fbanks)) # get all the keys
+
+    def __len__(self):
+        return self.keys.size
+
+    def __getitem__(self, idx):
+        key = self.keys[idx]
+        x = self.fbanks[key]
+        y = self.labels[key]
+
+        if CONVERT_LABELS:
+            y = (y != 0).astype('float32')
+
+        x = torch.from_numpy(x)
+        y = torch.from_numpy(y)
+        return x, y
 
 class VadDataset(Dataset):
     """Vad training dataset."""
@@ -107,8 +141,12 @@ def pad_collate(batch):
 
 if __name__ == '__main__':
     # Load the data and create DataLoader instances
-    train_data = VadDataset(DATA_TRAIN)
-    test_data = VadDataset(DATA_TEST)
+    if USE_KALDI:
+        train_data = VadDatasetArk(DATA_TRAIN_KALDI)
+        test_data = VadDatasetArk(DATA_TEST_KALDI)
+    else:
+        train_data = VadDataset(DATA_TRAIN)
+        test_data = VadDataset(DATA_TEST)
     train_loader = DataLoader(
             dataset=train_data, batch_size=batch_size, shuffle=True, collate_fn=pad_collate)
     test_loader = DataLoader(
@@ -117,7 +155,8 @@ if __name__ == '__main__':
     model = Vad(input_dim, hidden_dim, num_layers).to(device)
     criterion = nn.BCELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.1)
+    if SCHEDULER:
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.1)
 
     # Train!!! hype!!!
     for epoch in range(num_epochs):
@@ -141,7 +180,8 @@ if __name__ == '__main__':
             if batch % 10 == 0:
                 print(f'Batch: {batch}, loss = {batch_loss.item():.4f}')
 
-        scheduler.step() # learning rate adjust
+        if SCHEDULER and (epoch + 1) % 5 == 0:
+            scheduler.step() # learning rate adjust
 
         # Test the model after each epoch
         with torch.no_grad():

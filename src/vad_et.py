@@ -11,6 +11,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 import torch.nn.functional as F
+import kaldiio
 
 import numpy as np
 import pickle
@@ -21,22 +22,52 @@ from glob import glob
 from vad import pad_collate
 
 # model hyper parameters
-num_epochs = 5
-batch_size = 64
-batch_size_test = 8
+num_epochs = 20
+batch_size = 128
+batch_size_test = 32
 
 input_dim = 296
 hidden_dim = 64
 out_dim = 3
 num_layers = 2
-lr = 1e-3
+lr = 1e-2
+SCHEDULER = True
 
-DATA_TRAIN = 'data/features/train'
-DATA_TEST = 'data/features/test'
-MODEL_PATH = 'src/models/vad_et.pt'
-SCHEDULER = False
+DATA_TRAIN = 'data/train'
+DATA_TEST = 'data/test'
+MODEL_PATH = 'vad_et.pt'
+
+USE_KALDI = False
+DATA_TRAIN_KALDI = 'data/train'
+DATA_TEST_KALDI = 'data/test'
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+class VadETDatasetArk(Dataset):
+    """VadET training dataset. Uses kaldi scp and ark files."""
+
+    def __init__(self, root_dir):
+        self.root_dir = root_dir if root_dir[-1] == '/' else root_dir + '/'
+        self.fbanks = kaldiio.load_scp(f'{self.root_dir}fbanks.scp')
+        self.embed = kaldiio.load_scp(f'{self.root_dir}embed.scp')
+        self.labels = kaldiio.load_scp(f'{self.root_dir}labels.scp')
+        self.keys = np.array(list(self.fbanks)) # get all the keys
+
+    def __len__(self):
+        return self.keys.size
+
+    def __getitem__(self, idx):
+        key = self.keys[idx]
+        x = self.fbanks[key]
+        embed = self.embed[key]
+        y = self.labels[key]
+
+        # add the dvector array to the feature vector
+        x = np.hstack((x, np.full((x.shape[0], 256), embed)))
+
+        x = torch.from_numpy(x)
+        y = torch.from_numpy(y)
+        return x, y
 
 class VadETDataset(Dataset):
     """VadET training dataset."""
@@ -100,8 +131,12 @@ def wpl(output, target):
 
 if __name__ == '__main__':
     # Load the data and create DataLoader instances
-    train_data = VadETDataset(DATA_TRAIN)
-    test_data = VadETDataset(DATA_TEST)
+    if USE_KALDI:
+        train_data = VadETDatasetArk(DATA_TRAIN_KALDI)
+        test_data = VadETDatasetArk(DATA_TEST_KALDI)
+    else:
+        train_data = VadETDataset(DATA_TRAIN)
+        test_data = VadETDataset(DATA_TEST)
     train_loader = DataLoader(
             dataset=train_data, batch_size=batch_size, shuffle=True, collate_fn=pad_collate)
     test_loader = DataLoader(
@@ -141,7 +176,11 @@ if __name__ == '__main__':
             if batch % 10 == 0:
                 print(f'Batch: {batch}, loss = {loss:.4f}')
 
-        if SCHEDULER: scheduler.step() # learning rate adjust
+        if SCHEDULER:
+            if epoch == 0:
+                scheduler.step() # learning rate adjust
+            if (epoch + 1) % 6 == 0:
+                scheduler.step() # learning rate adjust
 
         # Test the model after each epoch
         with torch.no_grad():
@@ -165,6 +204,6 @@ if __name__ == '__main__':
             acc = 100.0 * n_correct / n_samples
             print(f"accuracy = {acc:.2f}")
 
-    # Save the model
-    torch.save(model.state_dict(), MODEL_PATH)
+        # Save the model (after each epoch just to be sure...)
+        torch.save(model.state_dict(), MODEL_PATH)
 
