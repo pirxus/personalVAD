@@ -63,7 +63,7 @@ if [ $stage -le 2 ]; then
   cd $kaldi_root
 
   # reverberate the data, augment the data
-  ./data_prep_new.sh
+  ./data_prep_new.sh 0
   #cd ../../../data/concat
   #cat text_flac >> text
 
@@ -91,8 +91,17 @@ if [ $stage -le 3 ]; then # feature extraction
   cat labels_vad_*.scp > labels_vad.scp
   cd $repo_root
 fi
-exit 0
 
 if [ $stage -le 4 ]; then # split into train and test
+  cd $kaldi_root/data/
+  mkdir -p train
+  mkdir -p test
+  cd features
+  for name in fbanks embed scores labels labels_vad
+  do
+    awk 'NR % 10 == 0' $name.scp > ../test/$name.scp
+    cp $name.scp ../train/$name.scp #TODO: remove the lines
+  done
+  cd $repo_root
   #todo
 fi

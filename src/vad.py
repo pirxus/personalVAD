@@ -17,23 +17,27 @@ import sys
 from glob import glob
 
 # model hyper parameters
-num_epochs = 20
+num_epochs = 2
 batch_size = 128
 batch_size_test = 32
 
 input_dim = 40
 hidden_dim = 64
 num_layers = 2
-lr = 1e-2
-SCHEDULER = True
+lr = 1e-3
+SCHEDULER = False
 
 DATA_TRAIN = 'data/features/train'
 DATA_TEST = 'data/features/test'
 MODEL_PATH = 'src/models/vad.pt'
+SAVE_MODEL = False
 
-USE_KALDI = False
+USE_KALDI = True
 DATA_TRAIN_KALDI = 'data/train'
 DATA_TEST_KALDI = 'data/test'
+
+DATA_ELSEWHERE = True # move to DATA_ROOT
+DATA_ROOT = 'kaldi/egs/pvad'
 CONVERT_LABELS = True # uses the ns, tss, ntss labels and converts them to the base vad labels
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -57,7 +61,7 @@ class VadDatasetArk(Dataset):
         key = self.keys[idx]
         x = self.fbanks[key]
         y = self.labels[key]
-
+        
         if CONVERT_LABELS:
             y = (y != 0).astype('float32')
 
@@ -142,6 +146,11 @@ def pad_collate(batch):
 if __name__ == '__main__':
     # Load the data and create DataLoader instances
     if USE_KALDI:
+        if DATA_ELSEWHERE:
+            # move to the data folder
+            og_dir = os.getcwd()
+            os.chdir(DATA_ROOT)
+
         train_data = VadDatasetArk(DATA_TRAIN_KALDI)
         test_data = VadDatasetArk(DATA_TEST_KALDI)
     else:
@@ -172,7 +181,7 @@ if __name__ == '__main__':
                 loss = criterion(out_padded[j][:y_lens[j]],
                         torch.unsqueeze(y_padded[j][:y_lens[j]], 1))
                 batch_loss += loss
-            batch_loss /= batch_size
+            batch_loss /= batch_size # normalize for the batch
             batch_loss.backward()
             optimizer.step()
             optimizer.zero_grad()
@@ -204,5 +213,5 @@ if __name__ == '__main__':
             print(f"accuracy = {acc:.2f}")
 
         # Save the model - after each epoch for ensurance...
-        torch.save(model.state_dict(), MODEL_PATH)
-
+        if SAVE_MODEL:
+            torch.save(model.state_dict(), og_dir + '/' + MODEL_PATH)

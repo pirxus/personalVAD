@@ -99,7 +99,7 @@ def extract_features(scp, q_send, q_return):
         # extract the filterbank features
         fbanks = librosa.feature.melspectrogram(arr, 16000, n_fft=int(16000*0.25),
                 hop_length=160, n_mels=40, window='hamming')
-        logfbanks = np.log10(fbanks).T[:-2]
+        logfbanks = np.log10(fbanks + 1e-6).T[:-2]
             
         # now generate n ground truth labels based on the gtruth and tstamps labels
         # where n is the number of feature frames we extracted
