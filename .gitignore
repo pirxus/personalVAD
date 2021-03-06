@@ -1,4 +1,18 @@
 resemblyzer/
+
+# Kaldi
+!kaldi/
+kaldi/*
+!kaldi/egs/
+kaldi/egs/*
+!kaldi/egs/pvad
+
+kaldi/egs/pvad/data*/
+kaldi/egs/pvad/fbank*/
+kaldi/egs/pvad/*wav
+kaldi/egs/pvad/musan*
+kaldi/egs/pvad/RIRS_NOISES/
+
 # Data
 data/
 src/models/
@@ -6,7 +20,6 @@ src/models/
 # Unwanted source files and libraries
 src/ikrlib.py
 ivec_extr/
-kaldi/
 
 # Trash...
 file_list
