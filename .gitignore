@@ -7,11 +7,17 @@ kaldi/*
 kaldi/egs/*
 !kaldi/egs/pvad/
 
-#kaldi/egs/pvad/data*/
-#kaldi/egs/pvad/fbank*/
-#kaldi/egs/pvad/*wav
-#kaldi/egs/pvad/musan*
-#kaldi/egs/pvad/RIRS_NOISES/
+kaldi/egs/pvad/data*/
+kaldi/egs/pvad/fbank*/
+kaldi/egs/pvad/*wav
+kaldi/egs/pvad/*flac
+kaldi/egs/pvad/musan/
+kaldi/egs/pvad/musan*
+kaldi/egs/pvad/RIRS_NOISES/
+kaldi/egs/pvad/src/
+kaldi/egs/pvad/steps/
+kaldi/egs/pvad/utils/
+kaldi/egs/pvad/exp/
 
 # Data
 data/
