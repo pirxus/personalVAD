@@ -14,9 +14,12 @@ from glob import glob
 ALIGNED = True
 MPROCESS = False
 KEEP_TEXT = False
-N = 2000 # The number of generated utterances
-FILES_PER_DIR = 1000
-FLAC = True
+N = 100 # The number of generated utterances
+FILES_PER_DIR = 20
+FLAC = False
+
+SETS = ['dev-clean', 'dev-other', 'test-clean', 'test-other']#, 'train-clean-100']
+wav_scp_prefix = 'data/test/'
 
 
 # This function creates a list that contains tuples of the paths to the utterances
@@ -25,48 +28,48 @@ FLAC = True
 def parse_alignments(path):
     transcripts = [] 
     directory = path.rpartition('/')[0] + '/'
-    f = open(path)
-    for line in f.readlines():
-        name = line.split(' ')[0]
-        full_path = directory + name + '.flac'
-        aligned_text = line.split(' ')[1][1:-1]
-        tstamps = line.split(' ')[2][1:-2] # without the newline..
+    with open(path) as f:
+        for line in f.readlines():
+            name = line.split(' ')[0]
+            full_path = directory + name + '.flac'
+            aligned_text = line.split(' ')[1][1:-1]
+            tstamps = line.split(' ')[2][1:-2] # without the newline..
 
-        # throw away the actual words if not needed...
-        if not KEEP_TEXT:
-            aligned_text = re.sub(r"[A-Z']+", 'W', aligned_text)
+            # throw away the actual words if not needed...
+            if not KEEP_TEXT:
+                aligned_text = re.sub(r"[A-Z']+", 'W', aligned_text)
 
-        # store the aligned transcript in the list
-        transcripts.append((full_path, name, aligned_text, tstamps))
+            # store the aligned transcript in the list
+            transcripts.append((full_path, name, aligned_text, tstamps))
 
-    f.close()
     return transcripts
 
-def load_dataset_structure(root_dir):
+def load_dataset_structure(root):
     utterances = []
-    with os.scandir(root) as speakers:
-        for speaker in speakers:
-            #print(f'Now processing the speaker {speaker.name}')
+    for subset in SETS:
+        with os.scandir(root + subset) as speakers:
+            for speaker in speakers:
+                #print(f'Now processing the speaker {speaker.name}')
 
-            # extract the paths to the individual files and their transcriptions
-            transcripts = []
-            for dirName, subdirList, fileList in os.walk(root + speaker.name):
-                #print(f'Entering the {dirName} directory')
-        
-                # load the paths to the files and their transcriptions
-                if fileList != []:
-                    for f in glob(dirName + '/*.txt'):
+                # extract the paths to the individual files and their transcriptions
+                transcripts = []
+                for dirName, subdirList, fileList in os.walk(root + subset + '/' + speaker.name):
+                    #print(f'Entering the {dirName} directory')
+            
+                    # load the paths to the files and their transcriptions
+                    if fileList != []:
+                        for f in glob(dirName + '/*.txt'):
 
-                        # extract the transcriptions and store them in a list
-                        if f.split('.')[-2] == 'alignment':
-                            transcripts.extend(
-                                    parse_alignments(f))
+                            # extract the transcriptions and store them in a list
+                            if f.split('.')[-2] == 'alignment':
+                                transcripts.extend(
+                                        parse_alignments(f))
 
-                        # NOTE: I ended up using the alignment files only, since currently
-                        # they are all I need and contain all the information from the
-                        # original transcript files.
+                            # NOTE: I ended up using the alignment files only, since currently
+                            # they are all I need and contain all the information from the
+                            # original transcript files.
 
-            utterances.append((speaker.name, transcripts))
+                utterances.append((speaker.name, transcripts))
 
     return utterances
 
@@ -95,10 +98,12 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300,
 
     iteration = 0 # split files into directories by 1000
     cur_dir = ''
+    scp_path = ''
     for iteration in range(n):
         if iteration % FILES_PER_DIR == 0:
             # create a new destination subdirectory
-            cur_dir = dest + proc_name + str(iteration // FILES_PER_DIR) + '_concat' + '/'
+            scp_path = proc_name + str(iteration // FILES_PER_DIR) + '_concat' + '/'
+            cur_dir = dest + scp_path
             os.mkdir(cur_dir)
 
         # now randomly select the number of speaker utterances that are to be concatenated
@@ -166,9 +171,11 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300,
 
         # and write an entry to our wav.scp, utt2spk and text files
         if FLAC:
-            wav_scp.write(file_name + ' flac -d -c -s ' + cur_dir + file_name + '.flac |\n')
-        else: # kaldi only offers sox
-            wav_scp.write(file_name + ' sox ' + cur_dir + file_name + '.flac -t flac - |\n')
+            wav_scp.write(file_name + ' flac -d -c -s ' + wav_scp_prefix +
+                    scp_path + file_name + '.flac |\n')
+        else: # meta only offers sox
+            wav_scp.write(file_name + ' sox ' + wav_scp_prefix + scp_path +
+                    file_name + '.flac -b 16 -e signed -c 1 -t wav - |\n')
         utt2spk.write(file_name + ' ' + file_name + '\n')
         if ALIGNED: text.write(file_name + ' ' + transcript + ' ' + alignment + '\n')
 
@@ -176,7 +183,7 @@ if __name__ == '__main__':
 
     if len(sys.argv) != 3:
         print("Incorrect number of parameters for the concatenation script")
-        print("Please specify the path (i.e. data/LibriSpeech/dev-clean) to")
+        print("Please specify the path (i.e. data/LibriSpeech) to")
         print("the dataset's root direcotory as the first parameter and the name")
         print("of the destination folder that will contain the generated utterances.")
         sys.exit(0)

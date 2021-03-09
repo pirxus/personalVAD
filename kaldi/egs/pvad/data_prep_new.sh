@@ -35,13 +35,17 @@ if [ $stage -le 0 ]; then
   # Reverberate our data folder
   steps/data/reverberate_data_dir.py \
     "${rvb_opts[@]}" \
-    --prefix "rev" \
-    --speech-rvb-probability 0.6 \
+    --speech-rvb-probability 1 \
     --pointsource-noise-addition-probability 0 \
     --isotropic-noise-addition-probability 0 \
     --num-replications 1 \
     --source-sampling-rate 16000 \
     data/clean data/reverb
+
+  # Add a suffix to the reverberated data..
+  utils/copy_data_dir.sh --utt-suffix "-reverb" data/reverb data/reverb.new
+  rm -rf data/reverb
+  mv data/reverb.new data/reverb
 fi
 
 if [ $stage -le 1 ]; then

@@ -38,7 +38,7 @@ if [ $stage -le 0 ]; then
 
   # generate the concatenations
   echo "${green}Generating concatenated utterances...${reset}"
-  python src/concatenate_utterances.py data/LibriSpeech/train-clean-100 $concat_dir
+  python src/concatenate_utterances.py data/LibriSpeech $concat_dir
 
 fi
 
