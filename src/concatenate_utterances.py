@@ -16,6 +16,7 @@ MPROCESS = False
 KEEP_TEXT = False
 N = 2000 # The number of generated utterances
 FILES_PER_DIR = 1000
+FLAC = True
 
 
 # This function creates a list that contains tuples of the paths to the utterances
@@ -164,7 +165,10 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300,
         #    else: txt.write(transcript + '\n')
 
         # and write an entry to our wav.scp, utt2spk and text files
-        wav_scp.write(file_name + ' flac -d -c -s ' + cur_dir + file_name + '.flac |\n')
+        if FLAC:
+            wav_scp.write(file_name + ' flac -d -c -s ' + cur_dir + file_name + '.flac |\n')
+        else: # kaldi only offers sox
+            wav_scp.write(file_name + ' sox ' + cur_dir + file_name + '.flac -t flac - |\n')
         utt2spk.write(file_name + ' ' + file_name + '\n')
         if ALIGNED: text.write(file_name + ' ' + transcript + ' ' + alignment + '\n')
 
