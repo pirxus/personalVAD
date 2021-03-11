@@ -16,7 +16,7 @@ ALIGNED = True
 MPROCESS = False
 KEEP_TEXT = False
 N = 10000 # The number of generated utterances
-FILES_PER_DIR = 20
+FILES_PER_DIR = 2000
 FLAC = False
 
 UNIQUE = True # if true, each utterance can be used only once...
@@ -115,6 +115,7 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300,
         try:
             speakers = random.sample(dataset, n_utter) # randomly select n speakers
         except ValueError:
+            print("Ran out of utterances, ending...")
             # no utterances left in the dataset, just leave...
             return
 
