@@ -18,6 +18,8 @@ N = 100 # The number of generated utterances
 FILES_PER_DIR = 20
 FLAC = False
 
+UNIQUE = True # if true, each utterance can be used only once...
+
 SETS = ['dev-clean', 'dev-other', 'test-clean', 'test-other']#, 'train-clean-100']
 wav_scp_prefix = 'data/test/'
 
@@ -88,6 +90,7 @@ def trim_utt_end(x, sr, tstamps):
 
 def generate_concatenations(dataset, dest, proc_name='', n=1300,
         wav_scp=None, utt2spk=None, text=None):
+    random.seed()
     if proc_name != '':
         print(f'process {proc_name} starting...')
 
@@ -108,10 +111,22 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300,
 
         # now randomly select the number of speaker utterances that are to be concatenated
         n_utter = np.random.randint(1, 4)
-        speakers = random.sample(dataset, n_utter) # randomly select n speakers
+        try:
+            speakers = random.sample(dataset, n_utter) # randomly select n speakers
+        except ValueError:
+            # no utterances left in the dataset, just leave...
+            return
+
         utterances = []
         for speaker in speakers: # and for each speaker select a random utterance
-            utterances.append(random.choice(speaker[1]))
+            utt = random.choice(speaker[1])
+            utterances.append(utt)
+            if UNIQUE:
+                # delete the used utterance
+                speaker[1].remove(utt)
+                if not speaker[1]:
+                    # also delete the speaker if there are no utterances left
+                    dataset.remove(speaker)
 
         data = np.array([])
         file_name = ''
