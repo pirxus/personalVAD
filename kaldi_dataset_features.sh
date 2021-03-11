@@ -16,12 +16,22 @@
 
 augment=false
 reverberate=true
+utt_count=100000
 
 # some colors..
 red=`tput setaf 1`
 green=`tput setaf 2`
 reset=`tput sgr0`
 nj_features=4
+
+libri_folders=()
+libri_folders+=(dev-clean)
+libri_folders+=(dev-other)
+libri_folders+=(test-clean)
+libri_folders+=(test-other)
+#libri_folders+=(train-clean-100)
+#libri_folders+=(train-clean-360)
+#libri_folders+=(train-other-500)
 
 if [ -e $1 ]; then
   echo "Please specifiy the data preparation stage."
@@ -38,7 +48,8 @@ if [ $stage -le 0 ]; then
 
   # generate the concatenations
   echo "${green}Generating concatenated utterances...${reset}"
-  python src/concatenate_utterances.py data/LibriSpeech $concat_dir
+  python src/concatenate_utterances.py --libri_root data/LibriSpeech --concat_dir $concat_dir\
+    --count $utt_count $libri_folders
 
 fi
 

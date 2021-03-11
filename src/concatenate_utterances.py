@@ -3,6 +3,7 @@
 import sys
 import os
 from multiprocessing import Process
+import argparse as ap
 import time
 import re
 import random
@@ -14,7 +15,7 @@ from glob import glob
 ALIGNED = True
 MPROCESS = False
 KEEP_TEXT = False
-N = 100 # The number of generated utterances
+N = 10000 # The number of generated utterances
 FILES_PER_DIR = 20
 FLAC = False
 
@@ -195,16 +196,22 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300,
         if ALIGNED: text.write(file_name + ' ' + transcript + ' ' + alignment + '\n')
 
 if __name__ == '__main__':
+    parser = ap.ArgumentParser(description="Generate LibriSpeech concatenations.",
+            usage="concatenate_utterances.py [options]")
+    parser.add_argument('--libri_root', type=str, required=True,
+            help="Specify the path to the LibriSpeech dataset")
+    parser.add_argument('--concat_dir', type=str, required=True,
+            help="Specify the output folder")
+    parser.add_argument('--count', type=str, default=N,
+            help="Generated utterance count")
+    parser.add_argument('parts', type=str, required=True, nargs='*',
+            help="Specify which LibriSpeech folders to process")
+    args = parser.parse_args()
 
-    if len(sys.argv) != 3:
-        print("Incorrect number of parameters for the concatenation script")
-        print("Please specify the path (i.e. data/LibriSpeech) to")
-        print("the dataset's root direcotory as the first parameter and the name")
-        print("of the destination folder that will contain the generated utterances.")
-        sys.exit(0)
-    else:
-        root = sys.argv[1]
-        dest = sys.argv[2]
+        root = args.libri_root
+        dest = args.concat_dir
+        N = args.count
+        SETS = args.parts
         if root[-1] != '/': root += '/'
         if dest[-1] != '/': dest += '/'
         # check if the destination path is an absolute path
