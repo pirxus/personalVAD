@@ -22,7 +22,7 @@ FLAC = False
 UNIQUE = True # if true, each utterance can be used only once...
 
 SETS = ['dev-clean', 'dev-other', 'test-clean', 'test-other']#, 'train-clean-100']
-wav_scp_prefix = 'data/test/'
+wav_scp_prefix = 'data/clean/'
 
 
 # This function creates a list that contains tuples of the paths to the utterances
@@ -204,20 +204,24 @@ if __name__ == '__main__':
             help="Specify the output folder")
     parser.add_argument('--count', type=str, default=N,
             help="Generated utterance count")
-    parser.add_argument('parts', type=str, required=True, nargs='*',
+    parser.add_argument('--scp_prefix', type=str, default=wav_scp_prefix,
+            help="wav.scp path prefix")
+    parser.add_argument('parts', type=str, nargs='*',
             help="Specify which LibriSpeech folders to process")
     args = parser.parse_args()
 
-        root = args.libri_root
-        dest = args.concat_dir
-        N = args.count
-        SETS = args.parts
-        if root[-1] != '/': root += '/'
-        if dest[-1] != '/': dest += '/'
-        # check if the destination path is an absolute path
-        if not os.path.isabs(dest):
-            print("The destination folder path has to be specified as absolute")
-            sys.exit(1)
+    root = args.libri_root
+    dest = args.concat_dir
+    N = args.count
+    wav_scp_prefix = args.scp_prefix
+    SETS = args.parts
+    if root[-1] != '/': root += '/'
+    if dest[-1] != '/': dest += '/'
+    if wav_scp_prefix[-1] != '/': dest += '/'
+    # check if the destination path is an absolute path
+    if not os.path.isabs(dest):
+        print("The destination folder path has to be specified as absolute")
+        sys.exit(1)
 
     dataset = load_dataset_structure(root)
 
