@@ -202,7 +202,7 @@ if __name__ == '__main__':
             help="Specify the path to the LibriSpeech dataset")
     parser.add_argument('--concat_dir', type=str, required=True,
             help="Specify the output folder")
-    parser.add_argument('--count', type=str, default=N,
+    parser.add_argument('--count', type=int, default=N,
             help="Generated utterance count")
     parser.add_argument('--scp_prefix', type=str, default=wav_scp_prefix,
             help="wav.scp path prefix")

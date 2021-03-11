@@ -25,13 +25,13 @@ reset=`tput sgr0`
 nj_features=4
 
 libri_folders=()
-libri_folders+=(dev-clean)
-libri_folders+=(dev-other)
-libri_folders+=(test-clean)
-libri_folders+=(test-other)
-#libri_folders+=(train-clean-100)
-#libri_folders+=(train-clean-360)
-#libri_folders+=(train-other-500)
+libri_folders+="dev-clean"
+libri_folders+=" dev-other"
+#libri_folders+=" test-clean"
+#libri_folders+=" test-other"
+#libri_folders+=" train-clean-100"
+#libri_folders+=" train-clean-360"
+#libri_folders+=" train-other-500"
 
 if [ -e $1 ]; then
   echo "Please specifiy the data preparation stage."
