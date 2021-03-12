@@ -218,7 +218,7 @@ if __name__ == '__main__':
     SETS = args.parts
     if root[-1] != '/': root += '/'
     if dest[-1] != '/': dest += '/'
-    if wav_scp_prefix[-1] != '/': dest += '/'
+    if wav_scp_prefix[-1] != '/': wav_scp_prefix += '/'
     # check if the destination path is an absolute path
     if not os.path.isabs(dest):
         print("The destination folder path has to be specified as absolute")
