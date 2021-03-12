@@ -21,7 +21,9 @@ fi
 
 if [ ! -d "RIRS_NOISES" ]; then
   # Download and unzip the rirs 
-  wget --no-check-certificate http://www.openslr.org/resources/28/rirs_noises.zip
+  if [ ! -f "rirs_noises.zip" ]; then
+    wget --no-check-certificate http://www.openslr.org/resources/28/rirs_noises.zip
+  fi
   unzip rirs_noises.zip
 fi
 
@@ -83,28 +85,3 @@ if $use_music; then combine+=" data/music"; fi
 if $use_babble; then combine+=" data/babble"; fi
 #utils/combine_data.sh ${combine}
 utils/combine_data.sh data/augmented data/clean data/reverb
-
-
-exit 0
-
-##cp data/swbd_sre/vad.scp data/swbd_sre_reverb/
-##utils/copy_data_dir.sh --utt-suffix "-reverb" data/swbd_sre_reverb data/swbd_sre_reverb.new
-##rm -rf data/swbd_sre_reverb
-##mv data/swbd_sre_reverb.new data/swbd_sre_reverb
-#
-## extract 40-dimensional log-fbank features
-#if [ $stage -le 2 ]; then
-#  echo "${green}Extracting filterbank features...${reset}"
-#
-#  #mkdir -p data/fbank
-#  fbankdir=fbank
-#  for part in clean reverb; do
-#    steps/make_fbank.sh  --cmd "$train_cmd" --nj 4 data/$part exp/make_fbank/$part $fbankdir
-#    steps/compute_cmvn_stats.sh $part exp/make_fbank/$part $fbankdir
-#  done  
-#fi
-#
-## 
-#if [ $stage -le 3 ]; then
-#  echo "${green}Merging extracted features...${reset}"
-#fi

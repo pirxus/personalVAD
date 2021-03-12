@@ -78,8 +78,6 @@ if [ $stage -le 2 ]; then
   #cd ../../../data/concat
   #cat text_flac >> text
 
-  # TODO: fix the reverberation prefix so that utterances with the same transcriptions are
-  # grouped together...
 fi
 
 if [ $stage -le 3 ]; then # feature extraction
