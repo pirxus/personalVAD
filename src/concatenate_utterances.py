@@ -115,6 +115,7 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300,
         try:
             speakers = random.sample(dataset, n_utter) # randomly select n speakers
         except ValueError:
+            print("Ran out of utterances, ending...")
             # no utterances left in the dataset, just leave...
             return
 
