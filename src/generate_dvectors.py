@@ -9,17 +9,21 @@ from resemblyzer import VoiceEncoder, preprocess_wav, normalize_volume
 
 from extract_features_embed import get_speaker_embedding
 
-LIBRI_SOURCE = 'data/LibriSpeech/'
-DIRECTORIES = ['dev-clean', 'dev-other', 'test-clean', 'test-other', 'train-clean-100']
-EMBED_OUT = 'data/embeddings/'
+LIBRI_SOURCE = 'LibriSpeech/'
+DIRECTORIES = [#'dev-clean', 'dev-other', 'test-clean', 'test-other']
+               #'train-clean-100', 'train-clean-360'],
+               'train-other-500']
+EMBED_OUT = 'embeddings/'
 
 N_WAVS = 2
 
 encoder = VoiceEncoder()
 
 for directory in DIRECTORIES:
+    print(f"Processing directory: {directory}")
     with os.scandir(LIBRI_SOURCE + directory) as speakers:
         for speaker in speakers:
+            print(f"Processing speaker: {speaker}")
             if not os.path.isdir(speaker.path): continue
 
             with os.scandir(speaker.path) as sessions:

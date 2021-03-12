@@ -16,7 +16,7 @@ ALIGNED = True
 MPROCESS = False
 KEEP_TEXT = False
 N = 10000 # The number of generated utterances
-FILES_PER_DIR = 20
+FILES_PER_DIR = 2000
 FLAC = False
 
 UNIQUE = True # if true, each utterance can be used only once...

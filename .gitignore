@@ -1,4 +1,5 @@
 resemblyzer/
+trained_models/
 
 # Kaldi
 !kaldi/
@@ -14,6 +15,7 @@ kaldi/egs/pvad/*flac
 kaldi/egs/pvad/musan/
 kaldi/egs/pvad/musan*
 kaldi/egs/pvad/RIRS_NOISES/
+kaldi/egs/pvad/rirs_noises*
 kaldi/egs/pvad/src/
 kaldi/egs/pvad/steps/
 kaldi/egs/pvad/utils/
