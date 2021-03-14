@@ -18,15 +18,15 @@ import sys
 from glob import glob
 
 # model hyper parameters
-num_epochs = 2
+num_epochs = 10
 batch_size = 128
-batch_size_test = 32
+batch_size_test = 128
 
 input_dim = 40
 hidden_dim = 64
 num_layers = 2
 lr = 1e-3
-SCHEDULER = False
+SCHEDULER = True
 
 DATA_TRAIN = 'data/features/train'
 DATA_TEST = 'data/features/test'
@@ -60,12 +60,12 @@ class VadDatasetArk(Dataset):
         key = self.keys[idx]
         x = self.fbanks[key]
         y = self.labels[key]
-        
+
         if CONVERT_LABELS:
             y = (y != 0).astype('float32')
 
-        x = torch.from_numpy(x)
-        y = torch.from_numpy(y)
+        x = torch.from_numpy(x).float()
+        y = torch.from_numpy(y).float()
         return x, y
 
 class VadDataset(Dataset):
@@ -113,7 +113,7 @@ class Vad(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        out_packed, (h, c) = self.lstm(x)
+        out_packed, _ = self.lstm(x)
         out_padded, out_lengths = pad_packed_sequence(out_packed, batch_first=True)
 
         out_padded = self.fc(out_padded)

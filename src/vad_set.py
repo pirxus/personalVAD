@@ -74,8 +74,8 @@ class VadSETDatasetArk(Dataset):
         # add the dvector array to the feature vector
         x = np.hstack((x, np.full((x.shape[0], 256), embed)))
 
-        x = torch.from_numpy(x)
-        y = torch.from_numpy(y)
+        x = torch.from_numpy(x).float()
+        y = torch.from_numpy(y).long()
         return x, y
 
 class VadSETDataset(Dataset):
@@ -158,11 +158,11 @@ if __name__ == '__main__':
 
     # Load the data and create DataLoader instances
     if USE_KALDI:
-        train_data = VadDatasetArk(data_train)
-        test_data = VadDatasetArk(data_test)
+        train_data = VadSETDatasetArk(data_train)
+        test_data = VadSETDatasetArk(data_test)
     else:
-        train_data = VadDataset(data_train)
-        test_data = VadDataset(data_test)
+        train_data = VadSETDataset(data_train)
+        test_data = VadSETDataset(data_test)
 
     train_loader = DataLoader(
             dataset=train_data, batch_size=batch_size, shuffle=True, collate_fn=pad_collate)

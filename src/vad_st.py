@@ -68,8 +68,8 @@ class VadSTDatasetArk(Dataset):
         # add the speaker verification scores array to the feature vector
         x = np.hstack((x, np.expand_dims(scores, 1)))
 
-        x = torch.from_numpy(x)
-        y = torch.from_numpy(y)
+        x = torch.from_numpy(x).float()
+        y = torch.from_numpy(y).long()
         return x, y
 
 class VadSTDataset(Dataset):
@@ -148,11 +148,11 @@ if __name__ == '__main__':
 
     # Load the data and create DataLoader instances
     if USE_KALDI:
-        train_data = VadDatasetArk(data_train)
-        test_data = VadDatasetArk(data_test)
+        train_data = VadSTDatasetArk(data_train)
+        test_data = VadSTDatasetArk(data_test)
     else:
-        train_data = VadDataset(data_train)
-        test_data = VadDataset(data_test)
+        train_data = VadSTDataset(data_train)
+        test_data = VadSTDataset(data_test)
 
     train_loader = DataLoader(
             dataset=train_data, batch_size=batch_size, shuffle=True, collate_fn=pad_collate)
