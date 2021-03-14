@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# first, setup the NAME variable
+if [ -z ${NAME+x} ]; then
+  export NAME=clean # name is empty, default to 'clean'
+fi
+
 red=`tput setaf 1`
 green=`tput setaf 2`
 reset=`tput sgr0`
@@ -42,7 +47,7 @@ if [ $stage -le 0 ]; then
     --isotropic-noise-addition-probability 0 \
     --num-replications 1 \
     --source-sampling-rate 16000 \
-    data/clean data/reverb
+    data/$NAME data/reverb
 
   # Add a suffix to the reverberated data..
   utils/copy_data_dir.sh --utt-suffix "-reverb" data/reverb data/reverb.new
@@ -65,23 +70,21 @@ if [ $stage -le 1 ]; then
 
   # noise
   if $use_noise; then
-    steps/data/augment_data_dir.py --utt-suffix "noise" --fg-interval 1 --fg-snrs "15:10:5:0" --fg-noise-dir "data/musan_noise" data/clean data/noise
+    steps/data/augment_data_dir.py --utt-suffix "noise" --fg-interval 1 --fg-snrs "15:10:5:0" --fg-noise-dir "data/musan_noise" data/$NAME data/noise
   fi
   # music
   if $use_music; then
-    steps/data/augment_data_dir.py --utt-suffix "music" --bg-snrs "15:10:8:5" --num-bg-noises "1" --bg-noise-dir "data/musan_music" data/clean data/music
+    steps/data/augment_data_dir.py --utt-suffix "music" --bg-snrs "15:10:8:5" --num-bg-noises "1" --bg-noise-dir "data/musan_music" data/$NAME data/music
   fi
   # speech TODO: can this be used for overlapping speech???
   if $use_babble; then
-    steps/data/augment_data_dir.py --utt-suffix "babble" --bg-snrs "20:17:15:13" --num-bg-noises "3:4:5:6:7" --bg-noise-dir "data/musan_speech" data/clean data/babble
+    steps/data/augment_data_dir.py --utt-suffix "babble" --bg-snrs "20:17:15:13" --num-bg-noises "3:4:5:6:7" --bg-noise-dir "data/musan_speech" data/$NAME data/babble
   fi
-
 fi
 
 # combine the resulted augmented and reverberated scps
-combine="data/augmented data/clean data/reverb"
+combine="data/augmented data/$NAME data/reverb"
 if $use_noise; then combine+=" data/noise"; fi
 if $use_music; then combine+=" data/music"; fi
 if $use_babble; then combine+=" data/babble"; fi
-#utils/combine_data.sh ${combine}
-utils/combine_data.sh data/augmented data/clean data/reverb
+utils/combine_data.sh ${combine}

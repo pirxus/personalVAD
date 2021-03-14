@@ -30,16 +30,14 @@ from extract_features_embed import preprocess_wav, get_speaker_embedding,\
 from resemblyzer import VoiceEncoder
 
 KALDI_ROOT = 'kaldi/egs/pvad/'
-DATA_ROOT = 'data/augmented/'
 REPO_ROOT = ''
+# Path to the dataset
+DATA_ROOT = 'data/augmented/'
 EMBED_PATH = 'data/embeddings/'
+DEST = 'data/features/'
+TEXT = 'data/augmented/text' # ground truth annotations for each utterance
 
 """:"""
-# Path to the dataset
-DATA = 'data/concat/'
-DEST = 'data/features/'
-TEXT = 'data/concat/text' # ground truth annotations for each utterance
-LIBRI_SOURCE = 'data/LibriSpeech/train-clean-100/'
 TS_DROPOUT = True
 CACHE_DVECTORS = True
 
@@ -97,9 +95,11 @@ def extract_features(scp, q_send, q_return):
         arr = arr.astype(np.float32, order='C') / 32768
 
         # extract the filterbank features
-        fbanks = librosa.feature.melspectrogram(arr, 16000, n_fft=int(16000*0.25),
-                hop_length=160, n_mels=40, window='hamming')
-        logfbanks = np.log10(fbanks + 1e-6).T[:-2]
+        #fbanks = librosa.feature.melspectrogram(arr, 16000, n_fft=int(16000*0.25),
+        #        hop_length=160, n_mels=40, window='hamming')
+        #logfbanks = np.log10(fbanks + 1e-6).T[:-2]
+        fbanks, energy = psf.base.fbank(arr, nfilt=40, winfunc=np.hamming)
+        logfbanks = np.log10(fbanks + 1e-6)
             
         # now generate n ground truth labels based on the gtruth and tstamps labels
         # where n is the number of feature frames we extracted
@@ -221,7 +221,7 @@ def extract_features(scp, q_send, q_return):
             label_writer(utt_id, labels)
             label_vad_writer(utt_id, labels_vad)
 
-            # flush the results...
+            # flush the results... just to be sure really...
             if i % 100 == 0:
                 array_writer.fark.flush()
                 array_writer.fscp.flush()
@@ -252,16 +252,11 @@ if __name__ == '__main__':
     # change the cwd to the kaldi root in order to access the kaldi
     # required binaries...
     REPO_ROOT = os.getcwd() + '/' 
-    EMBED_PATH = REPO_ROOT + EMBED_PATH
+    #EMBED_PATH = REPO_ROOT + EMBED_PATH
     os.chdir(KALDI_ROOT)
 
-    # load the sv model
-    if MODE != Mode.VAD:
-        encoder = 'test'
-        #encoder = VoiceEncoder()
-
     # first, load the utterance transcriptions
-    with open('data/augmented/text') as text_file:
+    with open(TEXT) as text_file:
         for utterance in text_file:
             utt_id, _, rest = utterance.partition(' ')
             labels, _, tstamps = rest.partition(' ')
@@ -270,14 +265,9 @@ if __name__ == '__main__':
                     np.array([int(float(stamp)*1000) for stamp in tstamps.split(' ')], dtype=np.int))
 
     # get the file list for processing
-    files = glob('data/augmented/split_*.scp')
+    files = glob(DATA_ROOT + 'split_*.scp')
     files.sort()
     nj = len(files)
-
-    try:
-        mp.set_start_method('spawn')
-    except RuntimeError:
-        print("Cuda failed....")
 
     # create the communication queues
     manager = mp.Manager()

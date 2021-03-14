@@ -12,9 +12,12 @@
 #
 
 
-# first, some data-prep flags..
+if [ -z ${NAME+x} ]; then
+  export NAME=clean # name is empty, default to 'clean'
+fi
 
-augment=false
+# some data-prep flags..
+augment=true #TODO
 reverberate=true
 utt_count=100000
 

@@ -17,7 +17,7 @@ MPROCESS = False
 KEEP_TEXT = False
 N = 10000 # The number of generated utterances
 FILES_PER_DIR = 2000
-FLAC = False
+FLAC = True # if true, flac will be used to load the waveform. If false, sox will be used.
 
 UNIQUE = True # if true, each utterance can be used only once...
 

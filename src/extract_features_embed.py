@@ -61,11 +61,6 @@ def get_speaker_embedding(utt_id, spk_idx, encoder, n_wavs=2, use_cache=True, pa
         numpy.ndarray: The extracted speaker embedding
 
     """
-
-    # first remove the augmentation prefix...
-    if 'rev' in utt_id:
-        utt_id = utt_id.partition('-')[2]
-
     # get the speaker id
     spk_id = utt_id.split('_')[spk_idx].split('-')
 
