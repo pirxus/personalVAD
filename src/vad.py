@@ -10,6 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 import torch.nn.functional as F
 import kaldiio
+import argparse as ap
 
 import numpy as np
 import os
@@ -29,15 +30,13 @@ SCHEDULER = False
 
 DATA_TRAIN = 'data/features/train'
 DATA_TEST = 'data/features/test'
-MODEL_PATH = 'src/models/vad.pt'
-SAVE_MODEL = False
+MODEL_PATH = 'vad.pt'
+SAVE_MODEL = True
 
-USE_KALDI = True
+USE_KALDI = False
 DATA_TRAIN_KALDI = 'data/train'
 DATA_TEST_KALDI = 'data/test'
 
-DATA_ELSEWHERE = True # move to DATA_ROOT
-DATA_ROOT = 'kaldi/egs/pvad'
 CONVERT_LABELS = True # uses the ns, tss, ntss labels and converts them to the base vad labels
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -143,19 +142,33 @@ def pad_collate(batch):
 
     return xx_pad, yy_pad, x_lens, y_lens
 
+# training process..
 if __name__ == '__main__':
+    # default data path
+    data_train = DATA_TRAIN_KALDI if USE_KALDI else DATA_TRAIN
+    data_test = DATA_TEST_KALDI if USE_KALDI else DATA_TEST
+
+    # program arguments
+    parser = ap.ArgumentParser(description="Train the base VAD model.")
+    parser.add_argument('--train_dir', type=str, default=data_train)
+    parser.add_argument('--test_dir', type=str, default=data_test)
+    parser.add_argument('--model_path', type=str, default=MODEL_PATH)
+    parser.add_argument('--use_kaldi', action='store_true')
+    args = parser.parse_args()
+
+    MODEL_PATH = args.model_path
+    data_train = args.train_dir
+    data_test = args.test_dir
+    USE_KALDI = args.use_kaldi
+
     # Load the data and create DataLoader instances
     if USE_KALDI:
-        if DATA_ELSEWHERE:
-            # move to the data folder
-            og_dir = os.getcwd()
-            os.chdir(DATA_ROOT)
-
-        train_data = VadDatasetArk(DATA_TRAIN_KALDI)
-        test_data = VadDatasetArk(DATA_TEST_KALDI)
+        train_data = VadDatasetArk(data_train)
+        test_data = VadDatasetArk(data_test)
     else:
-        train_data = VadDataset(DATA_TRAIN)
-        test_data = VadDataset(DATA_TEST)
+        train_data = VadDataset(data_train)
+        test_data = VadDataset(data_test)
+
     train_loader = DataLoader(
             dataset=train_data, batch_size=batch_size, shuffle=True, collate_fn=pad_collate)
     test_loader = DataLoader(
@@ -214,4 +227,10 @@ if __name__ == '__main__':
 
         # Save the model - after each epoch for ensurance...
         if SAVE_MODEL:
-            torch.save(model.state_dict(), og_dir + '/' + MODEL_PATH)
+
+            # if necessary, create the destination path for the model...
+            path_seg = MODEL_PATH.split('/')[:-1]
+            if path_seg != []:
+                if not os.path.exists(MODEL_PATH.rpartition('/')[0]):
+                    os.makedirs('/'.join(path_seg))
+            torch.save(model.state_dict(), MODEL_PATH)

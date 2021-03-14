@@ -12,6 +12,7 @@ from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 import torch.nn.functional as F
 import kaldiio
+import argparse as ap
 
 import numpy as np
 import pickle
@@ -36,6 +37,7 @@ SCHEDULER = True
 DATA_TRAIN = 'data/train'
 DATA_TEST = 'data/test'
 MODEL_PATH = 'vad_et.pt'
+SAVE_MODEL = True
 
 USE_KALDI = False
 DATA_TRAIN_KALDI = 'data/train'
@@ -130,13 +132,31 @@ def wpl(output, target):
     """
 
 if __name__ == '__main__':
+    # default data path
+    data_train = DATA_TRAIN_KALDI if USE_KALDI else DATA_TRAIN
+    data_test = DATA_TEST_KALDI if USE_KALDI else DATA_TEST
+
+    # program arguments
+    parser = ap.ArgumentParser(description="Train the VAD ET model.")
+    parser.add_argument('--train_dir', type=str, default=data_train)
+    parser.add_argument('--test_dir', type=str, default=data_test)
+    parser.add_argument('--model_path', type=str, default=MODEL_PATH)
+    parser.add_argument('--use_kaldi', action='store_true')
+    args = parser.parse_args()
+
+    MODEL_PATH = args.model_path
+    data_train = args.train_dir
+    data_test = args.test_dir
+    USE_KALDI = args.use_kaldi
+
     # Load the data and create DataLoader instances
     if USE_KALDI:
-        train_data = VadETDatasetArk(DATA_TRAIN_KALDI)
-        test_data = VadETDatasetArk(DATA_TEST_KALDI)
+        train_data = VadDatasetArk(data_train)
+        test_data = VadDatasetArk(data_test)
     else:
-        train_data = VadETDataset(DATA_TRAIN)
-        test_data = VadETDataset(DATA_TEST)
+        train_data = VadDataset(data_train)
+        test_data = VadDataset(data_test)
+
     train_loader = DataLoader(
             dataset=train_data, batch_size=batch_size, shuffle=True, collate_fn=pad_collate)
     test_loader = DataLoader(
@@ -205,5 +225,12 @@ if __name__ == '__main__':
             print(f"accuracy = {acc:.2f}")
 
         # Save the model (after each epoch just to be sure...)
-        torch.save(model.state_dict(), MODEL_PATH)
+        if SAVE_MODEL:
+
+            # if necessary, create the destination path for the model...
+            path_seg = MODEL_PATH.split('/')[:-1]
+            if path_seg != []:
+                if not os.path.exists(MODEL_PATH.rpartition('/')[0]):
+                    os.makedirs('/'.join(path_seg))
+            torch.save(model.state_dict(), MODEL_PATH)
 
