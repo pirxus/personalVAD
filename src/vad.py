@@ -170,9 +170,11 @@ if __name__ == '__main__':
         test_data = VadDataset(data_test)
 
     train_loader = DataLoader(
-            dataset=train_data, batch_size=batch_size, shuffle=True, collate_fn=pad_collate)
+            dataset=train_data, num_workers=4, pin_memory=True,
+            batch_size=batch_size, shuffle=True, collate_fn=pad_collate)
     test_loader = DataLoader(
-            dataset=test_data, batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
+            dataset=test_data, num_workers=2, pin_memory=True,
+            batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
     model = Vad(input_dim, hidden_dim, num_layers).to(device)
     criterion = nn.BCELoss()
