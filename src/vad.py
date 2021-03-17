@@ -31,10 +31,10 @@ SCHEDULER = True
 DATA_TRAIN = 'data/features/train'
 DATA_TEST = 'data/features/test'
 MODEL_PATH = 'vad.pt'
-SAVE_MODEL = True
+SAVE_MODEL = False
 
 USE_KALDI = False
-MULTI_GPU = False
+MULTI_GPU = True
 DATA_TRAIN_KALDI = 'data/train'
 DATA_TEST_KALDI = 'data/test'
 
@@ -113,13 +113,20 @@ class Vad(nn.Module):
         self.fc = nn.Linear(hidden_dim, 1)
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x):
-        out_packed, _ = self.lstm(x)
-        out_padded, out_lengths = pad_packed_sequence(out_packed, batch_first=True)
+    def forward(self, x, x_lens, hidden):
+        x_packed = pack_padded_sequence(x, x_lens, batch_first=True, enforce_sorted=False)
+        out_packed, hidden = self.lstm(x_packed, hidden)
+        out_padded, _ = pad_packed_sequence(out_packed, batch_first=True)
 
         out_padded = self.fc(out_padded)
         out_padded = self.sigmoid(out_padded)
-        return out_padded
+        return out_padded, hidden
+
+    def init_hidden(self, batch_size):
+        weight = next(self.parameters()).data
+        hidden = weight.new(self.num_layers, batch_size, self.hidden_dim)
+        cell = weight.new(self.num_layers, batch_size, self.hidden_dim)
+        return torch.stack([hidden, cell])
 
 def pad_collate(batch):
     """Padding function used to deal with batches of sequences of variable lengths.
@@ -174,12 +181,15 @@ if __name__ == '__main__':
             dataset=train_data, num_workers=4, pin_memory=True,
             batch_size=batch_size, shuffle=True, collate_fn=pad_collate)
     test_loader = DataLoader(
-            dataset=test_data, num_workers=2, pin_memory=True,
+            dataset=test_data, num_workers=4, pin_memory=True,
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
-    model = Vad(input_dim, hidden_dim, num_layers).to(device)
+    net = Vad(input_dim, hidden_dim, num_layers).to(device)
     if MULTI_GPU:
-        model = torch.nn.DataParallel(model)
+        model = torch.nn.DataParallel(net)
+    else:
+        model = net
+
     criterion = nn.BCELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     if SCHEDULER:
@@ -189,12 +199,13 @@ if __name__ == '__main__':
     for epoch in range(num_epochs):
         print(f"====== Starting epoch {epoch} ======")
         for batch, (x_padded, y_padded, x_lens, y_lens) in enumerate(train_loader):
-            x_packed = pack_padded_sequence(
-                    x_padded.to(device), x_lens, batch_first=True, enforce_sorted=False).to(device)
-            out_padded = model(x_packed)
-            
-            batch_loss = 0.0
             y_padded = y_padded.to(device)
+
+            # pass the data through the model
+            out_padded, _ = model(x_padded.to(device), x_lens, None)
+
+            # compute the loss
+            batch_loss = 0.0
             for j in range(out_padded.size(0)):
                 loss = criterion(out_padded[j][:y_lens[j]],
                         torch.unsqueeze(y_padded[j][:y_lens[j]], 1))
@@ -216,10 +227,9 @@ if __name__ == '__main__':
             n_correct = 0
             n_samples = 0
             for x_padded, y_padded, x_lens, y_lens in test_loader:
-                x_packed = pack_padded_sequence(
-                        x_padded.to(device), x_lens, batch_first=True, enforce_sorted=False)
-                out_padded = model(x_packed)
                 y_padded = y_padded.to(device)
+
+                out_padded, _ = model(x_padded.to(device), x_lens, None)
 
                 # value, index
                 for j in range(out_padded.size(0)):

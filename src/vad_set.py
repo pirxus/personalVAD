@@ -42,6 +42,7 @@ MODEL_PATH = 'vad_set.pt'
 SAVE_MODEL = True
 
 USE_KALDI = False
+MULTI_GPU = True
 DATA_TRAIN_KALDI = 'data/train'
 DATA_TEST_KALDI = 'data/test'
 
@@ -131,12 +132,19 @@ class VadSET(nn.Module):
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_dim, out_dim)
 
-    def forward(self, x):
-        out_packed, _ = self.lstm(x)
-        out_padded, out_lengths = pad_packed_sequence(out_packed, batch_first=True)
+    def forward(self, x, x_lens, hidden):
+        x_packed = pack_padded_sequence(x, x_lens, batch_first=True, enforce_sorted=False)
+        out_packed, hidden = self.lstm(x_packed, hidden)
+        out_padded, _ = pad_packed_sequence(out_packed, batch_first=True)
 
         out_padded = self.fc(out_padded)
-        return out_padded
+        return out_padded, hidden
+
+    def init_hidden(self, batch_size):
+        weight = next(self.parameters()).data
+        hidden = weight.new(self.num_layers, batch_size, self.hidden_dim)
+        cell = weight.new(self.num_layers, batch_size, self.hidden_dim)
+        return torch.stack([hidden, cell])
 
 if __name__ == '__main__':
     # default data path
@@ -168,7 +176,7 @@ if __name__ == '__main__':
             dataset=train_data, num_workers=4, pin_memory=True,
             batch_size=batch_size, shuffle=True, collate_fn=pad_collate)
     test_loader = DataLoader(
-            dataset=test_data, num_workers=2, pin_memory=True,
+            dataset=test_data, num_workers=4, pin_memory=True,
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
     model = VadSET(input_dim, hidden_dim, num_layers, out_dim).to(device)
@@ -181,26 +189,20 @@ if __name__ == '__main__':
     for epoch in range(num_epochs):
         print(f"====== Starting epoch {epoch} ======")
         for batch, (x_padded, y_padded, x_lens, y_lens) in enumerate(train_loader):
-
-            # pad the sequences..
-            x_packed = pack_padded_sequence(
-                    x_padded.to(device), x_lens, batch_first=True, enforce_sorted=False).to(device)
-
-            # zero the gradients..
-            optimizer.zero_grad()
-
-            # get the prediction
-            out_padded = model(x_packed)
-            
-            loss = torch.zeros(3, device=device)
             y_padded = y_padded.to(device)
 
+            # pass the data through the model
+            out_padded, _ = model(x_padded.to(device), x_lens, None)
+
+            # compute the loss
+            loss = torch.zeros(3, device=device)
             for j in range(out_padded.size(0)):
                 loss += criterion(out_padded[j][:y_lens[j]], y_padded[j][:y_lens[j]])
 
             loss = loss.sum() / batch_size # normalize loss for each batch..
             loss.backward()
             optimizer.step()
+            optimizer.zero_grad()
             
             if batch % 10 == 0:
                 print(f'Batch: {batch}, loss = {loss:.4f}')
@@ -215,12 +217,10 @@ if __name__ == '__main__':
             n_correct = 0
             n_samples = 0
             for x_padded, y_padded, x_lens, y_lens in test_loader:
-                # pad the sequences..
-                x_packed = pack_padded_sequence(
-                        x_padded.to(device), x_lens, batch_first=True, enforce_sorted=False).to(device)
-
-                out_padded = model(x_packed)
                 y_padded = y_padded.to(device)
+
+                # pass the data through the model
+                out_padded, _ = model(x_padded.to(device), x_lens, None)
 
                 # value, index
                 for j in range(out_padded.size(0)):
