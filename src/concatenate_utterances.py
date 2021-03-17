@@ -147,6 +147,11 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300,
                 x, end_stamp = trim_utt_end(x, sr, stamps)
                 data = np.append(data, x)
 
+                # check if the waveform isn't corrupt -__-
+                if x.size < 100:
+                    data = np.array([])
+                    break
+
                 # offset the timestamps
                 if tstamps != []:
                     tstamps.pop()
@@ -179,6 +184,12 @@ def generate_concatenations(dataset, dest, proc_name='', n=1300,
 
             file_name = file_name[:-1]
             transcript = transcript[:-1]
+
+
+        # check if the waveform isn't corrupt -__- skipp
+        if data.size < 100:
+            print(f"An utterance with path {file_name} was too short.")
+            continue
 
         # save the new file and transcription
         sf.write(cur_dir + file_name + '.flac', data, 16000)

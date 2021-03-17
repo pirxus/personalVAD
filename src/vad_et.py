@@ -23,7 +23,7 @@ from glob import glob
 from vad import pad_collate
 
 # model hyper parameters
-num_epochs = 20
+num_epochs = 3
 batch_size = 128
 batch_size_test = 32
 
@@ -31,7 +31,7 @@ input_dim = 296
 hidden_dim = 64
 out_dim = 3
 num_layers = 2
-lr = 1e-2
+lr = 1e-3
 SCHEDULER = True
 
 DATA_TRAIN = 'data/train'
@@ -177,7 +177,7 @@ if __name__ == '__main__':
 
             # pad the sequences..
             x_packed = pack_padded_sequence(
-                    x_padded, x_lens, batch_first=True, enforce_sorted=False).to(device)
+                    x_padded.to(device), x_lens, batch_first=True, enforce_sorted=False).to(device)
 
             # zero the gradients..
             optimizer.zero_grad()
@@ -212,7 +212,7 @@ if __name__ == '__main__':
             for x_padded, y_padded, x_lens, y_lens in test_loader:
                 # pad the sequences..
                 x_packed = pack_padded_sequence(
-                        x_padded, x_lens, batch_first=True, enforce_sorted=False).to(device)
+                        x_padded.to(device), x_lens, batch_first=True, enforce_sorted=False).to(device)
 
                 out_padded = model(x_packed)
                 y_padded = y_padded.to(device)

@@ -174,7 +174,7 @@ if __name__ == '__main__':
 
             # pad the sequences..
             x_packed = pack_padded_sequence(
-                    x_padded, x_lens, batch_first=True, enforce_sorted=False).to(device)
+                    x_padded.to(device), x_lens, batch_first=True, enforce_sorted=False).to(device)
 
             # zero the gradients..
             optimizer.zero_grad()
@@ -207,7 +207,7 @@ if __name__ == '__main__':
             for x_padded, y_padded, x_lens, y_lens in test_loader:
                 # pad the sequences..
                 x_packed = pack_padded_sequence(
-                        x_padded, x_lens, batch_first=True, enforce_sorted=False).to(device)
+                        x_padded.to(device), x_lens, batch_first=True, enforce_sorted=False).to(device)
 
                 out_padded = model(x_packed)
                 y_padded = y_padded.to(device)

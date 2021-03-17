@@ -18,14 +18,14 @@ import sys
 from glob import glob
 
 # model hyper parameters
-num_epochs = 10
+num_epochs = 3 
 batch_size = 128
 batch_size_test = 128
 
 input_dim = 40
 hidden_dim = 64
 num_layers = 2
-lr = 1e-3
+lr = 1e-4
 SCHEDULER = True
 
 DATA_TRAIN = 'data/features/train'
@@ -34,6 +34,7 @@ MODEL_PATH = 'vad.pt'
 SAVE_MODEL = True
 
 USE_KALDI = False
+MULTI_GPU = False
 DATA_TRAIN_KALDI = 'data/train'
 DATA_TEST_KALDI = 'data/test'
 
@@ -137,8 +138,8 @@ def pad_collate(batch):
     x_lens = [len(x) for x in xx]
     y_lens = [len(y) for y in yy]
 
-    xx_pad = pad_sequence(xx, batch_first=True, padding_value=0).to(device)
-    yy_pad = pad_sequence(yy, batch_first=True, padding_value=0).to(device)
+    xx_pad = pad_sequence(xx, batch_first=True, padding_value=0)
+    yy_pad = pad_sequence(yy, batch_first=True, padding_value=0)
 
     return xx_pad, yy_pad, x_lens, y_lens
 
@@ -177,6 +178,8 @@ if __name__ == '__main__':
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
     model = Vad(input_dim, hidden_dim, num_layers).to(device)
+    if MULTI_GPU:
+        model = torch.nn.DataParallel(model)
     criterion = nn.BCELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     if SCHEDULER:
@@ -187,7 +190,7 @@ if __name__ == '__main__':
         print(f"====== Starting epoch {epoch} ======")
         for batch, (x_padded, y_padded, x_lens, y_lens) in enumerate(train_loader):
             x_packed = pack_padded_sequence(
-                    x_padded, x_lens, batch_first=True, enforce_sorted=False).to(device)
+                    x_padded.to(device), x_lens, batch_first=True, enforce_sorted=False).to(device)
             out_padded = model(x_packed)
             
             batch_loss = 0.0
@@ -204,7 +207,7 @@ if __name__ == '__main__':
             if batch % 10 == 0:
                 print(f'Batch: {batch}, loss = {batch_loss.item():.4f}')
 
-        if SCHEDULER and (epoch + 1) % 5 == 0:
+        if SCHEDULER:
             scheduler.step() # learning rate adjust
 
         # Test the model after each epoch
@@ -214,7 +217,7 @@ if __name__ == '__main__':
             n_samples = 0
             for x_padded, y_padded, x_lens, y_lens in test_loader:
                 x_packed = pack_padded_sequence(
-                        x_padded, x_lens, batch_first=True, enforce_sorted=False)
+                        x_padded.to(device), x_lens, batch_first=True, enforce_sorted=False)
                 out_padded = model(x_packed)
                 y_padded = y_padded.to(device)
 
