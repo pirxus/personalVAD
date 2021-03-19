@@ -12,8 +12,6 @@ SV scores. All of the previous is then saved into an ark file.
 
 """
 
-# TODO: use conda for librosa and kaldiio/other 3rd party libraries???
-
 import os
 import sys
 import numpy as np
@@ -28,6 +26,7 @@ import multiprocessing as mp
 from extract_features_embed import preprocess_wav, get_speaker_embedding,\
     Mode, embedding_cache, cos
 from resemblyzer import VoiceEncoder
+from resemblyzer_mod import VoiceEncoderMod
 
 KALDI_ROOT = 'kaldi/egs/pvad/'
 REPO_ROOT = ''
@@ -54,6 +53,7 @@ txt = dict()
 def gpu_worker(q_send, q_return):
     # first, initialize the model
     encoder = VoiceEncoder()
+    encoder_mod = VoiceEncoderMod()
     rate = 3
 
     while True:
@@ -95,11 +95,9 @@ def extract_features(scp, q_send, q_return):
         arr = arr.astype(np.float32, order='C') / 32768
 
         # extract the filterbank features
-        #fbanks = librosa.feature.melspectrogram(arr, 16000, n_fft=int(16000*0.25),
-        #        hop_length=160, n_mels=40, window='hamming')
-        #logfbanks = np.log10(fbanks + 1e-6).T[:-2]
-        fbanks, energy = psf.base.fbank(arr, nfilt=40, winfunc=np.hamming)
-        logfbanks = np.log10(fbanks + 1e-6)
+        fbanks = librosa.feature.melspectrogram(arr, 16000, n_fft=400,
+                hop_length=160, n_mels=40)
+        logfbanks = np.log10(fbanks + 1e-6).T[:-2]
             
         # now generate n ground truth labels based on the gtruth and tstamps labels
         # where n is the number of feature frames we extracted
@@ -164,7 +162,7 @@ def extract_features(scp, q_send, q_return):
             # resemblyzer's wav_preprocess function - we don't want any vad preprocessing
 
             # send the datata to be processed on the gpu and retreive the result
-            q_send.put((preprocess_wav(arr), pid))
+            q_send.put((arr, pid))
             utt_embeds = q_return.get()
 
             rate = 3
@@ -187,7 +185,7 @@ def extract_features(scp, q_send, q_return):
             scores = np.append(np.kron(scores_raw[0], np.ones(160, dtype=scores_raw.dtype)),
                 np.kron(scores_raw, np.ones(frame_step, dtype=scores_raw.dtype)))
             assert scores.size >= logfbanks.shape[0],\
-                "Error: The score array was longer than the actual feature vector."
+                "Error: The score array was shorter than the actual feature vector."
 
             # trim the score vector to be the same length as the acoustic features
             scores = scores[:logfbanks.shape[0]]
