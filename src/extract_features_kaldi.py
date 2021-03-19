@@ -15,9 +15,11 @@ SV scores. All of the previous is then saved into an ark file.
 import os
 import sys
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 import kaldiio
 import random
 import librosa
+import torch
 from kaldiio import ReadHelper, WriteHelper
 from glob import glob
 import python_speech_features as psf
@@ -49,26 +51,37 @@ GEN_SPK_EMBEDDINGS = False
 MODE = Mode.ET
 
 txt = dict()
+rate = 2.5
+samples_per_frame = 160
+frame_step = int(np.round((16000 / rate) / samples_per_frame))
 
 def gpu_worker(q_send, q_return):
     # first, initialize the model
-    encoder = VoiceEncoder()
-    encoder_mod = VoiceEncoderMod()
-    rate = 3
+    encoder = VoiceEncoderMod()
+    device = encoder.device
 
     while True:
-        # fetch the tensor
-        x, pid = q_send.get()
 
-        # compute the partial embeddings
-        _, utt_embeds, slices = encoder.embed_utterance(x, return_partials=True,
-                rate=rate, min_coverage=0.5)
+        fbanks, fbanks_sliced, pid = q_send.get()
+        
+        # move the incoming tensors to cuda
+        fbanks = fbanks.to(device)
+        fbanks_sliced = fbanks_sliced.to(device)
+
+        with torch.no_grad():
+            # pass the tensors through the model (two forward methods...) and get
+            # the embeddings
+            embeds_stream, _ = encoder.forward_stream(fbanks, None)
+            embeds_stream = embeds_stream.cpu()
+
+            # windowed embeddings..
+            embeds_slices = encoder(fbanks_sliced).cpu()
 
         # return the tensor back to the original process
-        q_return[pid].put(utt_embeds)
+        q_return[pid].put((embeds_stream, embeds_slices))
+
 
 def extract_features(scp, q_send, q_return):
-    #encoder = VoiceEncoder()
     encoder = None
     wav_scp = ReadHelper(f'scp:{scp}')
     pid = int(scp.rpartition('.')[0].rpartition('_')[2]) # NOTE: critical for queue functionality
@@ -78,7 +91,6 @@ def extract_features(scp, q_send, q_return):
     label_writer = WriteHelper(f'ark,scp:{DEST}labels_{pid}.ark,{DEST}labels_{pid}.scp')
     label_vad_writer = WriteHelper(f'ark,scp:{DEST}labels_vad_{pid}.ark,{DEST}labels_vad_{pid}.scp')
 
-    i = 0
     for utt_id, (sr, arr) in wav_scp:
 
         # now load the transcription and the alignment timestamps
@@ -96,8 +108,8 @@ def extract_features(scp, q_send, q_return):
 
         # extract the filterbank features
         fbanks = librosa.feature.melspectrogram(arr, 16000, n_fft=400,
-                hop_length=160, n_mels=40)
-        logfbanks = np.log10(fbanks + 1e-6).T[:-2]
+                hop_length=160, n_mels=40).astype('float32').T[:-2]
+        logfbanks = np.log10(fbanks + 1e-6)
             
         # now generate n ground truth labels based on the gtruth and tstamps labels
         # where n is the number of feature frames we extracted
@@ -139,7 +151,8 @@ def extract_features(scp, q_send, q_return):
             # make a one speaker utterance without a target speaker to mitigate
             # overfitting for the target speaker class
             if TS_DROPOUT and n_speakers == 1 and CACHE_DVECTORS:
-                use_target = bool(np.random.randint(0, 3))
+                #use_target = bool(np.random.randint(0, 3))
+                use_target = True # just use the target speaker... it's proportional..
                 if use_target or embedding_cache == {}:
                     # target speaker
                     which = 0
@@ -162,33 +175,53 @@ def extract_features(scp, q_send, q_return):
             # resemblyzer's wav_preprocess function - we don't want any vad preprocessing
 
             # send the datata to be processed on the gpu and retreive the result
-            q_send.put((arr, pid))
-            utt_embeds = q_return.get()
+            fbanks_sliced = sliding_window_view(fbanks, (160, 40)
+                    ).squeeze(axis=1)[::frame_step].copy()
 
-            rate = 3
-            """
-            x = preprocess_wav(arr)
-            _, utt_embeds, slices = encoder.embed_utterance(x, return_partials=True,
-                    rate=rate, min_coverage=0.5)
-            """
+            # prepare the fbanks tensor
+            fbanks_tensor = torch.unsqueeze(torch.from_numpy(fbanks), 0)
+            q_send.put((fbanks_tensor, torch.from_numpy(fbanks_sliced), pid))
+            embeds_stream, embeds_slices = q_return.get()
 
-            # compute the cosine similarity between the partial embeddings and the target
-            # speaker embedding
-            scores_raw = np.array([ cos(spk_embed, cur_embed) for cur_embed in utt_embeds ])
+            # convert to numpy arrays
+            embeds_stream = embeds_stream.numpy().squeeze()
+            embeds_slices = embeds_slices.numpy()
+
+            # now generate three types of scores...
+            # 1) with np.kron, just cloning the score value for each fbank slice (40 frames)
+            # 2) linearly interpolate the slice scores with np.linspace
+            # 3) just use the frame-level embeddings to score each frame individually
+
+            # cosine similarities...
+            scores_slices = np.array([ cos(spk_embed, cur_embed) for cur_embed in embeds_slices ])
+            scores_stream = np.array([ cos(spk_embed, cur_embed) for cur_embed in embeds_stream ])
 
             # span the extracted scores to the whole utterance length
             # - the first 160 frames are the first score as the embedding is computed from
             #   a 1.6s long window
             # - all the other scores have frame_step frames between them
-            samples_per_frame = 160
-            frame_step = int(np.round((16000 / rate) / samples_per_frame))
-            scores = np.append(np.kron(scores_raw[0], np.ones(160, dtype=scores_raw.dtype)),
-                np.kron(scores_raw, np.ones(frame_step, dtype=scores_raw.dtype)))
-            assert scores.size >= logfbanks.shape[0],\
+            scores_kron = np.append(np.kron(scores_slices[0], np.ones(160, dtype='float32')),
+                    np.kron(scores_slices[1:-1], np.ones(frame_step, dtype='float32')))
+            scores_kron = np.append(scores_kron, np.kron(scores_slices[-1],
+                np.ones(n - scores_kron.size, dtype='float32')))
+            assert scores_kron.size >= n,\
                 "Error: The score array was shorter than the actual feature vector."
 
-            # trim the score vector to be the same length as the acoustic features
-            scores = scores[:logfbanks.shape[0]]
+            # scores, linearly interpolated, starting from 0.5 every time
+            # first 160 frames..
+            scores_lin = np.linspace(0.5, scores_slices[0], 160, endpoint=False)
+            # now the rest...
+            for i, s in enumerate(scores_slices[1:]):
+                scores_lin = np.append(scores_lin,
+                        np.linspace(scores_slices[i], s, frame_step, endpoint=False))
+            scores_lin = np.append(scores_lin, np.kron(scores_slices[-1],
+                np.ones(n - scores_lin.size, dtype='float32')))
+
+            # stack the three score arrays
+            # legend: scores[0,:] -> scores_stream, 1 -> scores_slices, 2 -> scores_lin
+            scores = np.stack((scores_stream, scores_kron, scores_lin))
+            assert scores.shape[1] >= n,\
+                "Error: The score array was shorter than the actual feature vector."
 
             # now relabel the ground truths to three classes... (ns, ntss, tss) -> {0, 1, 2}
             labels = np.ones(n, dtype=np.float32)
@@ -260,7 +293,8 @@ if __name__ == '__main__':
             labels, _, tstamps = rest.partition(' ')
             # save them as preprocessed tuples...
             txt[utt_id] = (labels.split(','),
-                    np.array([int(float(stamp)*1000) for stamp in tstamps.split(' ')], dtype=np.int))
+                    np.array([int(float(stamp)*1000) for stamp in tstamps.split(' ')],
+                        dtype='int32'))
 
     # get the file list for processing
     files = glob(DATA_ROOT + 'split_*.scp')

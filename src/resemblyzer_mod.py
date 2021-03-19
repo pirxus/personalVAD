@@ -105,6 +105,9 @@ if __name__ == '__main__':
 
         # send the datata to be processed on the gpu and retreive the result
         rate = 2.5
+        samples_per_frame = 160
+        frame_step = int(np.round((16000 / rate) / samples_per_frame))
+
         x = arr
         _, utt_embeds, slices = encoder.embed_utterance(x, return_partials=True,
                 rate=rate, min_coverage=0.5)
@@ -117,7 +120,7 @@ if __name__ == '__main__':
             fbanks = fbanks.squeeze()
             # slice up the fbanks
             print(fbanks.shape)
-            fbanks_sliced = sliding_window_view(fbanks, (160, 40)).squeeze(axis=1)[::40].copy()
+            fbanks_sliced = sliding_window_view(fbanks, (160, 40)).squeeze(axis=1)[::frame_step].copy()
             #print(fbanks_sliced[::40].shape)
             print(utt_embeds.shape)
             tensor = torch.from_numpy(fbanks_sliced)
@@ -138,8 +141,6 @@ if __name__ == '__main__':
         #   a 1.6s long window
         # - all the other scores have frame_step frames between them and the last one
         #   is stretched to match the logfbanks length
-        samples_per_frame = 160
-        frame_step = int(np.round((16000 / rate) / samples_per_frame))
         scores = np.append(np.kron(scores_raw[0], np.ones(160, dtype=scores_raw.dtype)),
                 np.kron(scores_raw[1:-1], np.ones(frame_step, dtype=scores_raw.dtype)))
         scores = np.append(scores, np.kron(scores_raw[-1],
@@ -151,7 +152,7 @@ if __name__ == '__main__':
 
         scores_new_kron = np.append(np.kron(scores_new[0], np.ones(160, dtype=scores_raw.dtype)),
                 np.kron(scores_new[1:-1], np.ones(frame_step, dtype=scores_new.dtype)))
-        scores_new_kron = np.append(scores_new_kron, np.kron(scores_raw[-1],
+        scores_new_kron = np.append(scores_new_kron, np.kron(scores_new[-1],
             np.ones(logfbanks.shape[0] - scores_new_kron.size, dtype=scores_new.dtype)))
         
         print(f"SUM: {(scores - scores_new_kron).sum()}")
@@ -192,8 +193,6 @@ if __name__ == '__main__':
                     #labels[stamp_prev:stamp] = 1
 
             stamp_prev = stamp
-
-
 
     text_file.close()
     wav_scp.close()

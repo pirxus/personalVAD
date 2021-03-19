@@ -61,6 +61,9 @@ def get_speaker_embedding(utt_id, spk_idx, encoder, n_wavs=2, use_cache=True, pa
         numpy.ndarray: The extracted speaker embedding
 
     """
+    if "rev1-" in utt_id: # just care for the old reverberation prefix...
+        utt_id = utt_id[5:]
+
     # get the speaker id
     spk_id = utt_id.split('_')[spk_idx].split('-')
 
@@ -69,7 +72,6 @@ def get_speaker_embedding(utt_id, spk_idx, encoder, n_wavs=2, use_cache=True, pa
         # check whether the embedding is already present in the embedding cache
         if use_cache and spk_id[0] in embedding_cache:
             embedding = embedding_cache[spk_id[0]]
-
 
         else:
 
