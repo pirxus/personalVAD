@@ -54,6 +54,7 @@ txt = dict()
 rate = 2.5
 samples_per_frame = 160
 frame_step = int(np.round((16000 / rate) / samples_per_frame))
+min_coverage = 0.5
 
 def gpu_worker(q_send, q_return):
     # first, initialize the model
@@ -91,6 +92,7 @@ def extract_features(scp, q_send, q_return):
     label_writer = WriteHelper(f'ark,scp:{DEST}labels_{pid}.ark,{DEST}labels_{pid}.scp')
     label_vad_writer = WriteHelper(f'ark,scp:{DEST}labels_vad_{pid}.ark,{DEST}labels_vad_{pid}.scp')
 
+
     for utt_id, (sr, arr) in wav_scp:
 
         # now load the transcription and the alignment timestamps
@@ -110,6 +112,20 @@ def extract_features(scp, q_send, q_return):
         fbanks = librosa.feature.melspectrogram(arr, 16000, n_fft=400,
                 hop_length=160, n_mels=40).astype('float32').T[:-2]
         logfbanks = np.log10(fbanks + 1e-6)
+
+        # use resemblyzer to generate filterbank slices for scoring..
+        # NOTE: this piece of code was taken from the VoiceEncoder class and repurposed.
+        # the method I implemented had some problems with utterances that were below 1.6s long
+        wav = arr.copy()
+        wav_slices, mel_slices = VoiceEncoder.compute_partial_slices(wav.size, rate, min_coverage)
+        max_wave_length = wav_slices[-1].stop
+        if max_wave_length >= wav.size:
+            wav = np.pad(arr, (0, max_wave_length - wav.size), "constant")
+        mels = librosa.feature.melspectrogram(wav, 16000, n_fft=400,
+                hop_length=160, n_mels=40).astype('float32').T
+
+        # create the fbanks slices...
+        fbanks_sliced = np.array([mels[s] for s in mel_slices])
             
         # now generate n ground truth labels based on the gtruth and tstamps labels
         # where n is the number of feature frames we extracted
@@ -119,26 +135,8 @@ def extract_features(scp, q_send, q_return):
         if tstamps[-1] < n*10:
             tstamps[-1] = n * 10
 
-        # classic vad
-        if MODE == Mode.VAD:
-            labels = np.ones(n)
-            stamp_prev = 0
-            tstamps = tstamps // 10
-
-            for (stamp, label) in zip(tstamps, gtruth):
-                if label in ['', '$']: labels[stamp_prev:stamp] = 0
-                stamp_prev = stamp
-
-            # save the extracted features
-            np.savez(DEST + folder.name + '/' + utt_id + '.vad.fea',
-                    x=logfbanks, y=replace_zero_sequences(labels, 8))
-
-        # the baseline - combine speaker verification score and vad output
-        elif MODE == Mode.SC:
-            pass #TODO
-
         # score based training
-        elif MODE == Mode.ST or MODE == Mode.ET or MODE == Mode.SET:
+        if MODE == Mode.ST or MODE == Mode.ET or MODE == Mode.SET:
             # we need to extract partial embeddings for each utterance - each representing
             # a certain time window. Then those embeddings are compared with the target
             # speaker embedding via cosine similarity and this score is then used as
@@ -175,12 +173,12 @@ def extract_features(scp, q_send, q_return):
             # resemblyzer's wav_preprocess function - we don't want any vad preprocessing
 
             # send the datata to be processed on the gpu and retreive the result
-            try:
-                fbanks_sliced = sliding_window_view(fbanks, (160, 40)
-                        ).squeeze(axis=1)[::frame_step].copy()
-            except:
-                print(f"slice failed: fbanks.shape {fbanks.shape}, arr.shape {arr.shape}")
-                continue
+            #try:
+            #    fbanks_sliced = sliding_window_view(fbanks, (160, 40)
+            #            ).squeeze(axis=1)[::frame_step].copy()
+            #except:
+            #    print(f"slice failed: fbanks.shape {fbanks.shape}, arr.shape {arr.shape}")
+            #    continue
 
             # prepare the fbanks tensor
             fbanks_tensor = torch.unsqueeze(torch.from_numpy(fbanks), 0)
@@ -206,11 +204,11 @@ def extract_features(scp, q_send, q_return):
                 #   a 1.6s long window
                 # - all the other scores have frame_step frames between them
                 scores_kron = np.append(np.kron(scores_slices[0], np.ones(160, dtype='float32')),
-                        np.kron(scores_slices[1:-1], np.ones(frame_step, dtype='float32')))
-                scores_kron = np.append(scores_kron, np.kron(scores_slices[-1],
-                    np.ones(n - scores_kron.size, dtype='float32')))
+                        np.kron(scores_slices[1:], np.ones(frame_step, dtype='float32')))
+
                 assert scores_kron.size >= n,\
-                    "Error: The score array was shorter than the actual feature vector."
+                    "Error: The scores_kron array was shorter than the actual feature vector."
+                scores_kron = scores_kron[:n] # trim hte score array
 
                 # scores, linearly interpolated, starting from 0.5 every time
                 # first 160 frames..
@@ -219,19 +217,23 @@ def extract_features(scp, q_send, q_return):
                 for i, s in enumerate(scores_slices[1:]):
                     scores_lin = np.append(scores_lin,
                             np.linspace(scores_slices[i], s, frame_step, endpoint=False))
-                scores_lin = np.append(scores_lin, np.kron(scores_slices[-1],
-                    np.ones(n - scores_lin.size, dtype='float32')))
+
+                assert scores_lin.size >= n,\
+                    "Error: The scores_lin array was shorter than the actual feature vector."
+                scores_lin = scores_lin[:n] # trim the score array
 
                 # stack the three score arrays
                 # legend: scores[0,:] -> scores_stream, 1 -> scores_slices, 2 -> scores_lin
                 scores = np.stack((scores_stream, scores_kron, scores_lin))
                 assert scores.shape[1] >= n,\
                     "Error: The score array was shorter than the actual feature vector."
+
             except Exception as e:
                 print(type(e), e, e.args)
                 print(f"kron/lin: fbanks.shape {fbanks.shape}, arr.shape {arr.shape}")
                 print(f"scores_stream {scores_stream.shape} embeds_slices {embeds_slices.shape}")
                 print(f"scores_slices {scores_slices.shape} scores_kron {scores_kron.shape}")
+                print("===============")
                 continue
 
             # now relabel the ground truths to three classes... (ns, ntss, tss) -> {0, 1, 2}
@@ -275,6 +277,9 @@ def extract_features(scp, q_send, q_return):
                 label_writer.fscp.flush()
                 label_vad_writer.fark.flush()
                 label_vad_writer.fscp.flush()
+        else:
+            print("This feature extraction mode is not implemented...")
+            return
 
     # close all the scps..
     wav_scp.close()
