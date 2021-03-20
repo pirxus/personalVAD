@@ -18,11 +18,9 @@ DEST = 'embeddings'
 DIRECTORIES = ['dev-clean', 'dev-other', 'test-clean', 'test-other',
                'train-clean-100', 'train-clean-360', 'train-other-500']
 
-
-DVECTORS = False
-XVECTORS = False
 N_WAVS = 2
 
+# program line arguments
 parser = ap.ArgumentParser(description="Extract speaker embeddings for the LibriSpeech dataset.")
 parser.add_argument('--libri_root', type=str, required=False, default=LIBRI_ROOT,
         help="Specify the path to the LibriSpeech dataset")
@@ -34,6 +32,8 @@ parser.add_argument('--dvector', action='store_true',
         help="Extract d-vectors")
 parser.add_argument('--xvector', action='store_true',
         help="Extract x-vectors")
+parser.add_argument('--use_numpy', action='store_true',
+        help="Save the individual embeddings in the *.npy format instead of scp/ark")
 parser.add_argument('parts', type=str, nargs='*', default=DIRECTORIES,
         help="Specify which LibriSpeech folders to process")
 args = parser.parse_args()
@@ -44,6 +44,7 @@ DVECTORS = args.dvector
 XVECTORS = args.xvector
 N_WAVS = args.n_wavs
 DIRECTORIES = args.parts
+USE_NUMPY = args.use_numpy
 
 if DEST[-1] == '/': DEST = DEST[:-1]
 
@@ -56,9 +57,9 @@ xvector_model = SpeakerRecognition.from_hparams(
         source="speechbrain/spkrec-xvect-voxceleb",
         savedir=tmpdir.name)
 
-if DVECTORS:
+if DVECTORS and not USE_NUMPY:
     dvector_writer = WriteHelper(f'ark,scp:{DEST}/dvectors.ark,{DEST}/dvectors.scp')
-if XVECTORS:
+if XVECTORS and not USE_NUMPY:
     xvector_writer = WriteHelper(f'ark,scp:{DEST}/xvectors.ark,{DEST}/xvectors.scp')
 
 for directory in DIRECTORIES:
@@ -91,16 +92,22 @@ for directory in DIRECTORIES:
                 if DVECTORS:
                     # extract and save the dvector
                     dvector = dvector_model.embed_speaker(wavs_dvector)
-                    dvector_writer(speaker.name, dvector)
+                    if not USE_NUMPY:
+                        dvector_writer(speaker.name, dvector)
+                    else:
+                        np.save(DEST + '/' + speaker.name + '.dvector', dvector)
 
                 if XVECTORS:
                     # extract and save the xvector
                     utt = torch.cat(wavs_xvector, dim=1)
                     xvector = xvector_model.encode_batch(utt).numpy().squeeze().squeeze()
-                    xvector_writer(speaker.name, xvector)
+                    if not USE_NUMPY:
+                        xvector_writer(speaker.name, xvector)
+                    else:
+                        np.save(DEST + '/' + speaker.name + '.xvector', xvector)
 
-if DVECTORS: dvector_writer.close()
-if XVECTORS: xvector_writer.close()
+if DVECTORS and not USE_NUMPY: dvector_writer.close()
+if XVECTORS and not USE_NUMPY: xvector_writer.close()
 
 # delete the temporary directory
 tmpdir.cleanup()
