@@ -175,8 +175,12 @@ def extract_features(scp, q_send, q_return):
             # resemblyzer's wav_preprocess function - we don't want any vad preprocessing
 
             # send the datata to be processed on the gpu and retreive the result
-            fbanks_sliced = sliding_window_view(fbanks, (160, 40)
-                    ).squeeze(axis=1)[::frame_step].copy()
+            try:
+                fbanks_sliced = sliding_window_view(fbanks, (160, 40)
+                        ).squeeze(axis=1)[::frame_step].copy()
+            except:
+                print(f"slice failed: fbanks.shape {fbanks.shape}, arr.shape {arr.shape}")
+                continue
 
             # prepare the fbanks tensor
             fbanks_tensor = torch.unsqueeze(torch.from_numpy(fbanks), 0)
@@ -196,32 +200,39 @@ def extract_features(scp, q_send, q_return):
             scores_slices = np.array([ cos(spk_embed, cur_embed) for cur_embed in embeds_slices ])
             scores_stream = np.array([ cos(spk_embed, cur_embed) for cur_embed in embeds_stream ])
 
-            # span the extracted scores to the whole utterance length
-            # - the first 160 frames are the first score as the embedding is computed from
-            #   a 1.6s long window
-            # - all the other scores have frame_step frames between them
-            scores_kron = np.append(np.kron(scores_slices[0], np.ones(160, dtype='float32')),
-                    np.kron(scores_slices[1:-1], np.ones(frame_step, dtype='float32')))
-            scores_kron = np.append(scores_kron, np.kron(scores_slices[-1],
-                np.ones(n - scores_kron.size, dtype='float32')))
-            assert scores_kron.size >= n,\
-                "Error: The score array was shorter than the actual feature vector."
+            try:
+                # span the extracted scores to the whole utterance length
+                # - the first 160 frames are the first score as the embedding is computed from
+                #   a 1.6s long window
+                # - all the other scores have frame_step frames between them
+                scores_kron = np.append(np.kron(scores_slices[0], np.ones(160, dtype='float32')),
+                        np.kron(scores_slices[1:-1], np.ones(frame_step, dtype='float32')))
+                scores_kron = np.append(scores_kron, np.kron(scores_slices[-1],
+                    np.ones(n - scores_kron.size, dtype='float32')))
+                assert scores_kron.size >= n,\
+                    "Error: The score array was shorter than the actual feature vector."
 
-            # scores, linearly interpolated, starting from 0.5 every time
-            # first 160 frames..
-            scores_lin = np.linspace(0.5, scores_slices[0], 160, endpoint=False)
-            # now the rest...
-            for i, s in enumerate(scores_slices[1:]):
-                scores_lin = np.append(scores_lin,
-                        np.linspace(scores_slices[i], s, frame_step, endpoint=False))
-            scores_lin = np.append(scores_lin, np.kron(scores_slices[-1],
-                np.ones(n - scores_lin.size, dtype='float32')))
+                # scores, linearly interpolated, starting from 0.5 every time
+                # first 160 frames..
+                scores_lin = np.linspace(0.5, scores_slices[0], 160, endpoint=False)
+                # now the rest...
+                for i, s in enumerate(scores_slices[1:]):
+                    scores_lin = np.append(scores_lin,
+                            np.linspace(scores_slices[i], s, frame_step, endpoint=False))
+                scores_lin = np.append(scores_lin, np.kron(scores_slices[-1],
+                    np.ones(n - scores_lin.size, dtype='float32')))
 
-            # stack the three score arrays
-            # legend: scores[0,:] -> scores_stream, 1 -> scores_slices, 2 -> scores_lin
-            scores = np.stack((scores_stream, scores_kron, scores_lin))
-            assert scores.shape[1] >= n,\
-                "Error: The score array was shorter than the actual feature vector."
+                # stack the three score arrays
+                # legend: scores[0,:] -> scores_stream, 1 -> scores_slices, 2 -> scores_lin
+                scores = np.stack((scores_stream, scores_kron, scores_lin))
+                assert scores.shape[1] >= n,\
+                    "Error: The score array was shorter than the actual feature vector."
+            except Exception as e:
+                print(type(e), e, e.args)
+                print(f"kron/lin: fbanks.shape {fbanks.shape}, arr.shape {arr.shape}")
+                print(f"scores_stream {scores_stream.shape} embeds_slices {embeds_slices.shape}")
+                print(f"scores_slices {scores_slices.shape} scores_kron {scores_kron.shape}")
+                continue
 
             # now relabel the ground truths to three classes... (ns, ntss, tss) -> {0, 1, 2}
             labels = np.ones(n, dtype=np.float32)
