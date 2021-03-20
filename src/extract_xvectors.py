@@ -1,29 +1,38 @@
-"""Extracts and saves speaker embedding vectors for each speaker in the LibriSpeech dataset.
+"""Extracts and saves x-vectors for each speaker in the LibriSpeech dataset.
 """
 
 import numpy as np
 import os
 import soundfile as sf
 from glob import glob
-from resemblyzer import VoiceEncoder, preprocess_wav, normalize_volume
+import torchaudio
+import speechbrain
+from speechbrain.pretrained import SpeakerRecognition
+import torch
 from kaldiio import WriteHelper
+import tempfile
 
 LIBRI_SOURCE = 'LibriSpeech/'
 DIRECTORIES = ['dev-clean']#, 'dev-other', 'test-clean', 'test-other']
                #'train-clean-100', 'train-clean-360'],
                #'train-other-500']
-EMBED_OUT = 'embeddings/'
 DEST = 'embeddings'
 
-SAVE_SCP = True
-DVECTORS = True
-XVECTORS = True
 N_WAVS = 2
+XVECTORS = True
 
-encoder = VoiceEncoder()
+# create a temporary directory for the xvector model
+tmpdir = tempfile.TemporaryDirectory()
 
-if DVECTORS:
-    dvector_writer = WriteHelper(f'ark,scp:{DEST}/dvectors.ark,{DEST}/dvectors.scp')
+# x-vector interface
+xvector_model = SpeakerRecognition.from_hparams(
+        source="speechbrain/spkrec-xvect-voxceleb",
+        savedir=tmpdir.name)
+
+
+# open the ark and scp for writing
+if XVECTORS:
+    xvector_writer = WriteHelper(f'ark,scp:{DEST}/xvectors.ark,{DEST}/xvectors.scp')
 
 for directory in DIRECTORIES:
     print(f"Processing directory: {directory}")
@@ -43,17 +52,21 @@ for directory in DIRECTORIES:
                 wavs = []
                 for i in range(N_WAVS):
                     random_file = files[np.random.randint(0, n_files)]
-                    wavs.append(preprocess_wav(sf.read(random_file)[0]))
+                    x, sr = torchaudio.load(random_file)
+                    wavs.append(x)
 
-                # extract the embedding
-                dvector = encoder.embed_speaker(wavs)
+                # concatenate the utterances..
+                utt = torch.cat(wavs, dim=1)
+
+                # compute the xvector
+                xvector = xvector_model.encode_batch(utt).numpy().squeeze().squeeze()
 
                 # save the embedding
-                if SAVE_SCP:
-                    if DVECTORS:
-                        dvector_writer(speaker.name, dvector)
-                else:
-                    np.save(EMBED_OUT + speaker.name + '.dvector', dvector)
+                if XVECTORS:
+                    xvector_writer(speaker.name, xvector)
 
-if DVECTORS:
-    dvector_writer.close()
+if XVECTORS:
+    xvector_writer.close()
+
+# delete the temporary directory
+tmpdir.cleanup()
