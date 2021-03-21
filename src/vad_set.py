@@ -25,15 +25,15 @@ from glob import glob
 from vad import pad_collate
 
 # model hyper parameters
-num_epochs = 20
+num_epochs = 5
 batch_size = 128
-batch_size_test = 32
+batch_size_test = 128
 
 input_dim = 297
 hidden_dim = 64
 out_dim = 3
 num_layers = 2
-lr = 1e-2
+lr = 1e-3
 SCHEDULER = True
 
 DATA_TRAIN = 'data/train'
@@ -42,7 +42,7 @@ MODEL_PATH = 'vad_set.pt'
 SAVE_MODEL = True
 
 USE_KALDI = False
-MULTI_GPU = True
+MULTI_GPU = False
 DATA_TRAIN_KALDI = 'data/train'
 DATA_TEST_KALDI = 'data/test'
 
@@ -208,7 +208,7 @@ if __name__ == '__main__':
                 print(f'Batch: {batch}, loss = {loss:.4f}')
 
         if SCHEDULER:
-            if (epoch + 1) % 5 == 0:
+            if (epoch + 1) % 2 == 0:
                 scheduler.step() # learning rate adjust
 
         # Test the model after each epoch

@@ -19,22 +19,22 @@ from glob import glob
 
 # model hyper parameters
 num_epochs = 3 
-batch_size = 128
-batch_size_test = 128
+batch_size = 256
+batch_size_test = 256
 
 input_dim = 40
 hidden_dim = 64
 num_layers = 2
-lr = 1e-4
+lr = 1e-3
 SCHEDULER = True
 
 DATA_TRAIN = 'data/features/train'
 DATA_TEST = 'data/features/test'
 MODEL_PATH = 'vad.pt'
-SAVE_MODEL = False
+SAVE_MODEL = True
 
 USE_KALDI = False
-MULTI_GPU = True
+MULTI_GPU = False
 DATA_TRAIN_KALDI = 'data/train'
 DATA_TEST_KALDI = 'data/test'
 
