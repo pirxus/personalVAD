@@ -20,6 +20,7 @@ kaldi/egs/pvad/src/
 kaldi/egs/pvad/steps/
 kaldi/egs/pvad/utils/
 kaldi/egs/pvad/exp/
+kaldi/egs/pvad/embeddings/
 
 # Data
 data/

@@ -88,3 +88,4 @@ if $use_noise; then combine+=" data/noise"; fi
 if $use_music; then combine+=" data/music"; fi
 if $use_babble; then combine+=" data/babble"; fi
 utils/combine_data.sh ${combine}
+cp data/$NAME/reco2dur data/augmented
