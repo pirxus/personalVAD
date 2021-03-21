@@ -203,12 +203,14 @@ def extract_features(scp, q_send, q_return):
                 # - the first 160 frames are the first score as the embedding is computed from
                 #   a 1.6s long window
                 # - all the other scores have frame_step frames between them
-                scores_kron = np.append(np.kron(scores_slices[0], np.ones(160, dtype='float32')),
-                        np.kron(scores_slices[1:], np.ones(frame_step, dtype='float32')))
 
+                scores_kron = np.kron(scores_slices[0], np.ones(160, dtype='float32'))
+                if scores_slices.size > 1:
+                    scores_kron = np.append(scores_kron,
+                            np.kron(scores_slices[1:], np.ones(frame_step, dtype='float32')))
                 assert scores_kron.size >= n,\
                     "Error: The scores_kron array was shorter than the actual feature vector."
-                scores_kron = scores_kron[:n] # trim hte score array
+                scores_kron = scores_kron[:n] # trim the score array
 
                 # scores, linearly interpolated, starting from 0.5 every time
                 # first 160 frames..
@@ -233,6 +235,7 @@ def extract_features(scp, q_send, q_return):
                 print(f"kron/lin: fbanks.shape {fbanks.shape}, arr.shape {arr.shape}")
                 print(f"scores_stream {scores_stream.shape} embeds_slices {embeds_slices.shape}")
                 print(f"scores_slices {scores_slices.shape} scores_kron {scores_kron.shape}")
+                print(f"scores_lin {scores_lin.shape}")
                 print("===============")
                 continue
 
