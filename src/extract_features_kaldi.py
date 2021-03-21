@@ -15,14 +15,13 @@ SV scores. All of the previous is then saved into an ark file.
 import os
 import sys
 import numpy as np
-from numpy.lib.stride_tricks import sliding_window_view
+#from numpy.lib.stride_tricks import sliding_window_view
 import kaldiio
 import random
 import librosa
 import torch
 from kaldiio import ReadHelper, WriteHelper
 from glob import glob
-import python_speech_features as psf
 import multiprocessing as mp
 
 from extract_features_embed import preprocess_wav, get_speaker_embedding,\
@@ -36,6 +35,7 @@ REPO_ROOT = ''
 DATA_ROOT = 'data/augmented/'
 EMBED_PATH = 'data/embeddings/'
 DEST = 'data/features/'
+EMBED = 'embeddings/'
 TEXT = 'data/augmented/text' # ground truth annotations for each utterance
 
 """:"""
@@ -55,6 +55,16 @@ rate = 2.5
 samples_per_frame = 160
 frame_step = int(np.round((16000 / rate) / samples_per_frame))
 min_coverage = 0.5
+
+def load_dvector(utt_id, spk_idx, embed_scp):
+    """Load the dvector for the target speaker"""
+
+    # get the speaker id
+    if "rev1-" in utt_id: # just care for the old reverberation prefix...
+        utt_id = utt_id[5:]
+    spk_id = utt_id.split('_')[spk_idx].split('-')[0]
+    embedding = embed_scp[spk_id]
+    return embedding, spk_id
 
 def gpu_worker(q_send, q_return):
     # first, initialize the model
@@ -88,10 +98,10 @@ def extract_features(scp, q_send, q_return):
     pid = int(scp.rpartition('.')[0].rpartition('_')[2]) # NOTE: critical for queue functionality
     array_writer = WriteHelper(f'ark,scp:{DEST}fbanks_{pid}.ark,{DEST}fbanks_{pid}.scp')
     score_writer = WriteHelper(f'ark,scp:{DEST}scores_{pid}.ark,{DEST}scores_{pid}.scp')
-    embed_writer = WriteHelper(f'ark,scp:{DEST}embed_{pid}.ark,{DEST}embed_{pid}.scp')
+    #embed_writer = WriteHelper(f'ark,scp:{DEST}embed_{pid}.ark,{DEST}embed_{pid}.scp')
     label_writer = WriteHelper(f'ark,scp:{DEST}labels_{pid}.ark,{DEST}labels_{pid}.scp')
-    label_vad_writer = WriteHelper(f'ark,scp:{DEST}labels_vad_{pid}.ark,{DEST}labels_vad_{pid}.scp')
-
+    target_writer = open(f'{DEST}targets_{pid}.scp', 'w')
+    embed_scp = kaldiio.load_scp(f'{EMBED}/dvectors.scp')
 
     for utt_id, (sr, arr) in wav_scp:
 
@@ -135,162 +145,156 @@ def extract_features(scp, q_send, q_return):
         if tstamps[-1] < n*10:
             tstamps[-1] = n * 10
 
-        # score based training
-        if MODE == Mode.ST or MODE == Mode.ET or MODE == Mode.SET:
-            # we need to extract partial embeddings for each utterance - each representing
-            # a certain time window. Then those embeddings are compared with the target
-            # speaker embedding via cosine similarity and this score is then used as
-            # a feature.
+        # we need to extract partial embeddings for each utterance - each representing
+        # a certain time window. Then those embeddings are compared with the target
+        # speaker embedding via cosine similarity and this score is then used as
+        # a feature.
 
-            # randomly select a target speaker and compute his embedding
-            n_speakers = gtruth.count('$') + 1
+        # randomly select a target speaker and compute his embedding
+        n_speakers = gtruth.count('$') + 1
 
-            # now, based on TS_DROPOUT, decide with a certain probability, whether to 
-            # make a one speaker utterance without a target speaker to mitigate
-            # overfitting for the target speaker class
-            if TS_DROPOUT and n_speakers == 1 and CACHE_DVECTORS:
-                #use_target = bool(np.random.randint(0, 3))
-                use_target = True # just use the target speaker... it's proportional..
-                if use_target or embedding_cache == {}:
-                    # target speaker
-                    which = 0
-                    spk_embed = get_speaker_embedding(utt_id, which,
-                            encoder, path=EMBED_PATH)
-
-                else:
-                    # get a random speaker embedding ?? other than the current one ??
-                    if 'rev' in utt_id: spk_id = utt_id.partition('-')[2]
-                    spk_id = utt_id.split('-')[0]
-                    rnd_spk_id, spk_embed = random.choice(list(embedding_cache.items()))
-                    which = -1 if rnd_spk_id != spk_id else 0
+        # now, based on TS_DROPOUT, decide with a certain probability, whether to 
+        # make a one speaker utterance without a target speaker to mitigate
+        # overfitting for the target speaker class
+        if TS_DROPOUT and n_speakers == 1 and CACHE_DVECTORS:
+            #use_target = bool(np.random.randint(0, 3))
+            use_target = True # just use the target speaker... it's proportional..
+            if use_target or embedding_cache == {}:
+                # target speaker
+                which = 0
+                spk_embed, spk_id = load_dvector(utt_id, which, embed_scp)
+                print(spk_embed.shape)
 
             else:
-                which = np.random.randint(0, n_speakers) 
-                spk_embed = get_speaker_embedding(utt_id, which, encoder,
-                        use_cache=CACHE_DVECTORS, path=EMBED_PATH)
+                # get a random speaker embedding ?? other than the current one ??
+                if 'rev' in utt_id: spk_id = utt_id.partition('-')[2]
+                spk_id = utt_id.split('-')[0]
+                rnd_spk_id, spk_embed = random.choice(list(embedding_cache.items()))
+                which = -1 if rnd_spk_id != spk_id else 0
 
-            # get the partial utterances for the current utterance, but bypas the
-            # resemblyzer's wav_preprocess function - we don't want any vad preprocessing
-
-            # send the datata to be processed on the gpu and retreive the result
-            #try:
-            #    fbanks_sliced = sliding_window_view(fbanks, (160, 40)
-            #            ).squeeze(axis=1)[::frame_step].copy()
-            #except:
-            #    print(f"slice failed: fbanks.shape {fbanks.shape}, arr.shape {arr.shape}")
-            #    continue
-
-            # prepare the fbanks tensor
-            fbanks_tensor = torch.unsqueeze(torch.from_numpy(fbanks), 0)
-            q_send.put((fbanks_tensor, torch.from_numpy(fbanks_sliced), pid))
-            embeds_stream, embeds_slices = q_return.get()
-
-            # convert to numpy arrays
-            embeds_stream = embeds_stream.numpy().squeeze()
-            embeds_slices = embeds_slices.numpy()
-
-            # now generate three types of scores...
-            # 1) with np.kron, just cloning the score value for each fbank slice (40 frames)
-            # 2) linearly interpolate the slice scores with np.linspace
-            # 3) just use the frame-level embeddings to score each frame individually
-
-            # cosine similarities...
-            scores_slices = np.array([ cos(spk_embed, cur_embed) for cur_embed in embeds_slices ])
-            scores_stream = np.array([ cos(spk_embed, cur_embed) for cur_embed in embeds_stream ])
-
-            try:
-                # span the extracted scores to the whole utterance length
-                # - the first 160 frames are the first score as the embedding is computed from
-                #   a 1.6s long window
-                # - all the other scores have frame_step frames between them
-
-                scores_kron = np.kron(scores_slices[0], np.ones(160, dtype='float32'))
-                if scores_slices.size > 1:
-                    scores_kron = np.append(scores_kron,
-                            np.kron(scores_slices[1:], np.ones(frame_step, dtype='float32')))
-                assert scores_kron.size >= n,\
-                    "Error: The scores_kron array was shorter than the actual feature vector."
-                scores_kron = scores_kron[:n] # trim the score array
-
-                # scores, linearly interpolated, starting from 0.5 every time
-                # first 160 frames..
-                scores_lin = np.linspace(0.5, scores_slices[0], 160, endpoint=False)
-                # now the rest...
-                for i, s in enumerate(scores_slices[1:]):
-                    scores_lin = np.append(scores_lin,
-                            np.linspace(scores_slices[i], s, frame_step, endpoint=False))
-
-                assert scores_lin.size >= n,\
-                    "Error: The scores_lin array was shorter than the actual feature vector."
-                scores_lin = scores_lin[:n] # trim the score array
-
-                # stack the three score arrays
-                # legend: scores[0,:] -> scores_stream, 1 -> scores_slices, 2 -> scores_lin
-                scores = np.stack((scores_stream, scores_kron, scores_lin))
-                assert scores.shape[1] >= n,\
-                    "Error: The score array was shorter than the actual feature vector."
-
-            except Exception as e:
-                print(type(e), e, e.args)
-                print(f"kron/lin: fbanks.shape {fbanks.shape}, arr.shape {arr.shape}")
-                print(f"scores_stream {scores_stream.shape} embeds_slices {embeds_slices.shape}")
-                print(f"scores_slices {scores_slices.shape} scores_kron {scores_kron.shape}")
-                print(f"scores_lin {scores_lin.shape}")
-                print("===============")
-                continue
-
-            # now relabel the ground truths to three classes... (ns, ntss, tss) -> {0, 1, 2}
-            labels = np.ones(n, dtype=np.float32)
-            stamp_prev = 0
-            tstamps = tstamps // 10
-
-            for (stamp, label) in zip(tstamps, gtruth):
-                if label == '':
-                    labels[stamp_prev:stamp] = 0
-                elif label == '$':
-                    which -= 1;
-                    labels[stamp_prev:stamp] = 0
-                else:
-                    if which == 0: # tss
-                        labels[stamp_prev:stamp] = 2
-                    #else: # ntss - no need to label, the array is already filled with ones
-                        #labels[stamp_prev:stamp] = 1
-
-                stamp_prev = stamp
-
-            # now create one more label array for the base VAD system
-            labels_vad = (labels != 0).astype('float32')
-
-            # write the extracted features to the scp and ark files..
-            array_writer(utt_id, logfbanks)
-            score_writer(utt_id, scores)
-            embed_writer(utt_id, spk_embed)
-            label_writer(utt_id, labels)
-            label_vad_writer(utt_id, labels_vad)
-
-            # flush the results... just to be sure really...
-            if i % 100 == 0:
-                array_writer.fark.flush()
-                array_writer.fscp.flush()
-                score_writer.fark.flush()
-                score_writer.fscp.flush()
-                embed_writer.fark.flush()
-                embed_writer.fscp.flush()
-                label_writer.fark.flush()
-                label_writer.fscp.flush()
-                label_vad_writer.fark.flush()
-                label_vad_writer.fscp.flush()
         else:
-            print("This feature extraction mode is not implemented...")
-            return
+            which = np.random.randint(0, n_speakers) 
+            spk_embed, spk_id = load_dvector(utt_id, which, embed_scp)
+            print(spk_embed.shape)
+
+        # get the partial utterances for the current utterance, but bypas the
+        # resemblyzer's wav_preprocess function - we don't want any vad preprocessing
+
+        # send the datata to be processed on the gpu and retreive the result
+        #try:
+        #    fbanks_sliced = sliding_window_view(fbanks, (160, 40)
+        #            ).squeeze(axis=1)[::frame_step].copy()
+        #except:
+        #    print(f"slice failed: fbanks.shape {fbanks.shape}, arr.shape {arr.shape}")
+        #    continue
+
+        # prepare the fbanks tensor
+        fbanks_tensor = torch.unsqueeze(torch.from_numpy(fbanks), 0)
+        q_send.put((fbanks_tensor, torch.from_numpy(fbanks_sliced), pid))
+        embeds_stream, embeds_slices = q_return.get()
+
+        # convert to numpy arrays
+        embeds_stream = embeds_stream.numpy().squeeze()
+        embeds_slices = embeds_slices.numpy()
+
+        # now generate three types of scores...
+        # 1) with np.kron, just cloning the score value for each fbank slice (40 frames)
+        # 2) linearly interpolate the slice scores with np.linspace
+        # 3) just use the frame-level embeddings to score each frame individually
+
+        # cosine similarities...
+        scores_slices = np.array([ cos(spk_embed, cur_embed) for cur_embed in embeds_slices ])
+        scores_stream = np.array([ cos(spk_embed, cur_embed) for cur_embed in embeds_stream ])
+
+        try:
+            # span the extracted scores to the whole utterance length
+            # - the first 160 frames are the first score as the embedding is computed from
+            #   a 1.6s long window
+            # - all the other scores have frame_step frames between them
+
+            scores_kron = np.kron(scores_slices[0], np.ones(160, dtype='float32'))
+            if scores_slices.size > 1:
+                scores_kron = np.append(scores_kron,
+                        np.kron(scores_slices[1:], np.ones(frame_step, dtype='float32')))
+            assert scores_kron.size >= n,\
+                "Error: The scores_kron array was shorter than the actual feature vector."
+            scores_kron = scores_kron[:n] # trim the score array
+
+            # scores, linearly interpolated, starting from 0.5 every time
+            # first 160 frames..
+            scores_lin = np.linspace(0.5, scores_slices[0], 160, endpoint=False)
+            # now the rest...
+            for i, s in enumerate(scores_slices[1:]):
+                scores_lin = np.append(scores_lin,
+                        np.linspace(scores_slices[i], s, frame_step, endpoint=False))
+
+            assert scores_lin.size >= n,\
+                "Error: The scores_lin array was shorter than the actual feature vector."
+            scores_lin = scores_lin[:n] # trim the score array
+
+            # stack the three score arrays
+            # legend: scores[0,:] -> scores_stream, 1 -> scores_slices, 2 -> scores_lin
+            scores = np.stack((scores_stream, scores_kron, scores_lin))
+            assert scores.shape[1] >= n,\
+                "Error: The score array was shorter than the actual feature vector."
+
+        except Exception as e:
+            print(type(e), e, e.args)
+            print(f"kron/lin: fbanks.shape {fbanks.shape}, arr.shape {arr.shape}")
+            print(f"scores_stream {scores_stream.shape} embeds_slices {embeds_slices.shape}")
+            print(f"scores_slices {scores_slices.shape} scores_kron {scores_kron.shape}")
+            print(f"scores_lin {scores_lin.shape}")
+            print("===============")
+            continue
+
+        # now relabel the ground truths to three classes... (ns, ntss, tss) -> {0, 1, 2}
+        labels = np.ones(n, dtype=np.float32)
+        stamp_prev = 0
+        tstamps = tstamps // 10
+
+        for (stamp, label) in zip(tstamps, gtruth):
+            if label == '':
+                labels[stamp_prev:stamp] = 0
+            elif label == '$':
+                which -= 1;
+                labels[stamp_prev:stamp] = 0
+            else:
+                if which == 0: # tss
+                    labels[stamp_prev:stamp] = 2
+                #else: # ntss - no need to label, the array is already filled with ones
+                    #labels[stamp_prev:stamp] = 1
+
+            stamp_prev = stamp
+
+        # now create one more label array for the base VAD system
+        labels_vad = (labels != 0).astype('float32')
+
+        # write the extracted features to the scp and ark files..
+        array_writer(utt_id, logfbanks)
+        score_writer(utt_id, scores)
+        #embed_writer(utt_id, spk_embed)
+        label_writer(utt_id, labels)
+        target_writer.write(f"{utt_id} {spk_id}\n") # write the target speaker too..
+
+        # flush the results... just to be sure really...
+        if i % 100 == 0:
+            array_writer.fark.flush()
+            array_writer.fscp.flush()
+            score_writer.fark.flush()
+            score_writer.fscp.flush()
+            #embed_writer.fark.flush()
+            #embed_writer.fscp.flush()
+            label_writer.fark.flush()
+            label_writer.fscp.flush()
+            target_writer.flush()
 
     # close all the scps..
     wav_scp.close()
     array_writer.close()
     score_writer.close()
-    embed_writer.close()
+    #embed_writer.close()
     label_writer.close()
-    label_vad_writer.close()
+    target_writer.close()
 
 def process_init(txt, embed_path):
     global text

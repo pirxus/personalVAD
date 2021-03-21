@@ -97,10 +97,10 @@ if [ $stage -le 3 ]; then # feature extraction
   # combine back the feature scps
   cd $kaldi_root/data/features/
   cat fbanks_*.scp > fbanks.scp
-  cat embed_*.scp > embed.scp
+  #cat embed_*.scp > embed.scp
   cat scores_*.scp > scores.scp
   cat labels_*.scp > labels.scp
-  cat labels_vad_*.scp > labels_vad.scp
+  cat targets_*.scp > targets.scp
   cd $repo_root
 fi
 
@@ -109,7 +109,7 @@ if [ $stage -le 4 ]; then # split into train and test
   mkdir -p train
   mkdir -p test
   cd features
-  for name in fbanks embed scores labels labels_vad
+  for name in fbanks scores labels targets #embed 
   do
     awk 'NR % 10 == 0' $name.scp > ../test/$name.scp
     cp $name.scp ../train/$name.scp #TODO: remove the lines
