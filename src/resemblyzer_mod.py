@@ -5,7 +5,7 @@ from kaldiio import ReadHelper
 from resemblyzer import VoiceEncoder
 from extract_features_embed import preprocess_wav, get_speaker_embedding,\
     Mode, embedding_cache, cos
-from numpy.lib.stride_tricks import sliding_window_view
+#from numpy.lib.stride_tricks import sliding_window_view
 import python_speech_features as psf
 import random
 
@@ -27,6 +27,8 @@ class VoiceEncoderMod(VoiceEncoder):
         embeds_raw = self.relu(self.linear(out[:,:]))
         norm = torch.norm(embeds_raw, dim=2, keepdim=True)
         return embeds_raw / norm, hidden
+
+"""
 
 if __name__ == '__main__':
     model = VoiceEncoderMod()
@@ -196,3 +198,4 @@ if __name__ == '__main__':
 
     text_file.close()
     wav_scp.close()
+"""

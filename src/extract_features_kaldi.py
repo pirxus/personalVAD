@@ -24,8 +24,7 @@ from kaldiio import ReadHelper, WriteHelper
 from glob import glob
 import multiprocessing as mp
 
-from extract_features_embed import preprocess_wav, get_speaker_embedding,\
-    Mode, embedding_cache, cos
+from extract_features_embed import embedding_cache, cos
 from resemblyzer import VoiceEncoder
 from resemblyzer_mod import VoiceEncoderMod
 
@@ -48,7 +47,6 @@ CACHE_DVECTORS = True
 GEN_SPK_EMBEDDINGS = False
 
 """:"""
-MODE = Mode.ET
 
 txt = dict()
 rate = 2.5
@@ -163,7 +161,6 @@ def extract_features(scp, q_send, q_return):
                 # target speaker
                 which = 0
                 spk_embed, spk_id = load_dvector(utt_id, which, embed_scp)
-                print(spk_embed.shape)
 
             else:
                 # get a random speaker embedding ?? other than the current one ??
@@ -175,7 +172,6 @@ def extract_features(scp, q_send, q_return):
         else:
             which = np.random.randint(0, n_speakers) 
             spk_embed, spk_id = load_dvector(utt_id, which, embed_scp)
-            print(spk_embed.shape)
 
         # get the partial utterances for the current utterance, but bypas the
         # resemblyzer's wav_preprocess function - we don't want any vad preprocessing
