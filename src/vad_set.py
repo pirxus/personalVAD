@@ -38,6 +38,7 @@ SCHEDULER = True
 
 DATA_TRAIN = 'data/train'
 DATA_TEST = 'data/test'
+EMBED_PATH = 'embeddings'
 MODEL_PATH = 'vad_set.pt'
 SAVE_MODEL = True
 
@@ -46,27 +47,41 @@ MULTI_GPU = False
 DATA_TRAIN_KALDI = 'data/train'
 DATA_TEST_KALDI = 'data/test'
 
+# legend: scores[0,:] -> scores_stream, 1 -> scores_kron, 2 -> scores_lin
+SCORE_TYPE = 0
+
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 class VadSETDatasetArk(Dataset):
     """VadSET training dataset. Uses kaldi scp and ark files."""
 
-    def __init__(self, root_dir):
-        self.root_dir = root_dir if root_dir[-1] == '/' else root_dir + '/'
-        self.fbanks = kaldiio.load_scp(f'{self.root_dir}fbanks.scp')
-        self.scores = kaldiio.load_scp(f'{self.root_dir}scores.scp')
-        self.embed = kaldiio.load_scp(f'{self.root_dir}embed.scp')
-        self.labels = kaldiio.load_scp(f'{self.root_dir}labels.scp')
+    def __init__(self, root_dir, embed_path, score_type):
+        self.root_dir = root_dir
+        self.embed_path = embed_path
+        self.score_type = score_type
+
+        self.fbanks = kaldiio.load_scp(f'{self.root_dir}/fbanks.scp')
+        self.scores = kaldiio.load_scp(f'{self.root_dir}/scores.scp')
+        self.labels = kaldiio.load_scp(f'{self.root_dir}/labels.scp')
         self.keys = np.array(list(self.fbanks)) # get all the keys
+        self.embed = kaldiio.load_scp(f'{self.embed_path}/dvectors.scp')
+
+        # load the target speaker ids
+        self.targets = {}
+        with open(f'{self.root_dir}/targets.scp') as targets:
+            for line in targets:
+                (utt_id, target) = line.split()
+                self.targets[utt_id] = target
 
     def __len__(self):
         return self.keys.size
 
     def __getitem__(self, idx):
         key = self.keys[idx]
+        target = self.targets[key]
         x = self.fbanks[key]
-        scores = self.scores[key]
-        embed = self.embed[key]
+        scores = self.scores[key][self.score_type,:]
+        embed = self.embed[target]
         y = self.labels[key]
 
         # add the speaker verification scores array to the feature vector
@@ -155,6 +170,8 @@ if __name__ == '__main__':
     parser = ap.ArgumentParser(description="Train the VAD SET model.")
     parser.add_argument('--train_dir', type=str, default=data_train)
     parser.add_argument('--test_dir', type=str, default=data_test)
+    parser.add_argument('--embed_path', type=str, default=EMBED_PATH)
+    parser.add_argument('--score_type', type=int, default=SCORE_TYPE)
     parser.add_argument('--model_path', type=str, default=MODEL_PATH)
     parser.add_argument('--use_kaldi', action='store_true')
     args = parser.parse_args()
@@ -162,12 +179,18 @@ if __name__ == '__main__':
     MODEL_PATH = args.model_path
     data_train = args.train_dir
     data_test = args.test_dir
+    EMBED_PATH = args.embed_path
     USE_KALDI = args.use_kaldi
+    SCORE_TYPE = args.score_type
+
+    if SCORE_TYPE not in [0, 1, 2]:
+        print(f"Error: invalid scoring type: {SCORE_TYPE}. The values have to be in {0, 1, 2}.")
+        sys.exit(1)
 
     # Load the data and create DataLoader instances
     if USE_KALDI:
-        train_data = VadSETDatasetArk(data_train)
-        test_data = VadSETDatasetArk(data_test)
+        train_data = VadSETDatasetArk(data_train, EMBED_PATH, SCORE_TYPE)
+        test_data = VadSETDatasetArk(data_test, EMBED_PATH, SCORE_TYPE)
     else:
         train_data = VadSETDataset(data_train)
         test_data = VadSETDataset(data_test)

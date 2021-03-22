@@ -45,16 +45,21 @@ MULTI_GPU = True
 DATA_TRAIN_KALDI = 'data/train'
 DATA_TEST_KALDI = 'data/test'
 
+# legend: scores[0,:] -> scores_stream, 1 -> scores_kron, 2 -> scores_lin
+SCORE_TYPE = 0
+
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 class VadSTDatasetArk(Dataset):
     """VadST training dataset. Uses kaldi scp and ark files."""
 
-    def __init__(self, root_dir):
-        self.root_dir = root_dir if root_dir[-1] == '/' else root_dir + '/'
-        self.fbanks = kaldiio.load_scp(f'{self.root_dir}fbanks.scp')
-        self.scores = kaldiio.load_scp(f'{self.root_dir}scores.scp')
-        self.labels = kaldiio.load_scp(f'{self.root_dir}labels.scp')
+    def __init__(self, root_dir, score_type):
+        self.root_dir = root_dir
+        self.score_type = score_type
+
+        self.fbanks = kaldiio.load_scp(f'{self.root_dir}/fbanks.scp')
+        self.scores = kaldiio.load_scp(f'{self.root_dir}/scores.scp')
+        self.labels = kaldiio.load_scp(f'{self.root_dir}/labels.scp')
         self.keys = np.array(list(self.fbanks)) # get all the keys
 
     def __len__(self):
@@ -63,7 +68,7 @@ class VadSTDatasetArk(Dataset):
     def __getitem__(self, idx):
         key = self.keys[idx]
         x = self.fbanks[key]
-        scores = self.scores[key]
+        scores = self.scores[key][self.score_type,:]
         y = self.labels[key]
 
         # add the speaker verification scores array to the feature vector
@@ -145,6 +150,7 @@ if __name__ == '__main__':
     parser = ap.ArgumentParser(description="Train the VAD ST model.")
     parser.add_argument('--train_dir', type=str, default=data_train)
     parser.add_argument('--test_dir', type=str, default=data_test)
+    parser.add_argument('--score_type', type=int, default=SCORE_TYPE)
     parser.add_argument('--model_path', type=str, default=MODEL_PATH)
     parser.add_argument('--use_kaldi', action='store_true')
     args = parser.parse_args()
@@ -153,11 +159,16 @@ if __name__ == '__main__':
     data_train = args.train_dir
     data_test = args.test_dir
     USE_KALDI = args.use_kaldi
+    SCORE_TYPE = args.score_type
+
+    if SCORE_TYPE not in [0, 1, 2]:
+        print(f"Error: invalid scoring type: {SCORE_TYPE}. The values have to be in {0, 1, 2}.")
+        sys.exit(1)
 
     # Load the data and create DataLoader instances
     if USE_KALDI:
-        train_data = VadSTDatasetArk(data_train)
-        test_data = VadSTDatasetArk(data_test)
+        train_data = VadSTDatasetArk(data_train, SCORE_TYPE)
+        test_data = VadSTDatasetArk(data_test, SCORE_TYPE)
     else:
         train_data = VadSTDataset(data_train)
         test_data = VadSTDataset(data_test)

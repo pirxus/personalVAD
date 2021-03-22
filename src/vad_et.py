@@ -36,6 +36,7 @@ SCHEDULER = True
 
 DATA_TRAIN = 'data/train'
 DATA_TEST = 'data/test'
+EMBED_PATH = 'embeddings'
 MODEL_PATH = 'vad_et.pt'
 SAVE_MODEL = True
 
@@ -49,20 +50,29 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 class VadETDatasetArk(Dataset):
     """VadET training dataset. Uses kaldi scp and ark files."""
 
-    def __init__(self, root_dir):
-        self.root_dir = root_dir if root_dir[-1] == '/' else root_dir + '/'
-        self.fbanks = kaldiio.load_scp(f'{self.root_dir}fbanks.scp')
-        self.embed = kaldiio.load_scp(f'{self.root_dir}embed.scp')
-        self.labels = kaldiio.load_scp(f'{self.root_dir}labels.scp')
+    def __init__(self, root_dir, embed_path):
+        self.root_dir = root_dir
+        self.embed_path = embed_path
+        self.fbanks = kaldiio.load_scp(f'{self.root_dir}/fbanks.scp')
+        self.labels = kaldiio.load_scp(f'{self.root_dir}/labels.scp')
         self.keys = np.array(list(self.fbanks)) # get all the keys
+        self.embed = kaldiio.load_scp(f'{self.embed_path}/dvectors.scp')
+
+        # load the target speaker ids
+        self.targets = {}
+        with open(f'{self.root_dir}/targets.scp') as targets:
+            for line in targets:
+                (utt_id, target) = line.split()
+                self.targets[utt_id] = target
 
     def __len__(self):
         return self.keys.size
 
     def __getitem__(self, idx):
         key = self.keys[idx]
+        target = self.targets[key]
         x = self.fbanks[key]
-        embed = self.embed[key]
+        embed = self.embed[target]
         y = self.labels[key]
 
         # add the dvector array to the feature vector
@@ -135,9 +145,24 @@ class VadET(nn.Module):
         cell = weight.new(self.num_layers, batch_size, self.hidden_dim)
         return torch.stack([hidden, cell])
 
-def wpl(output, target):
-    """Weighted pairwise loss.
+
+def wpl(output, target, weights):
+    """Weighted pairwise loss
+
+    The weight pairs are interpreted as follows:
+    [<ns,tss> ; <ntss,ns> ; <tss,ntss>]
+
+    target contains indexes, output is a tensor of probabilites for each class
+    (ns, ntss, tss) -> {0, 1, 2}
+
     """
+
+
+    mean = output[0]
+    return -mean
+
+
+
 
 if __name__ == '__main__':
     # default data path
@@ -148,6 +173,7 @@ if __name__ == '__main__':
     parser = ap.ArgumentParser(description="Train the VAD ET model.")
     parser.add_argument('--train_dir', type=str, default=data_train)
     parser.add_argument('--test_dir', type=str, default=data_test)
+    parser.add_argument('--embed_path', type=str, default=EMBED_PATH)
     parser.add_argument('--model_path', type=str, default=MODEL_PATH)
     parser.add_argument('--use_kaldi', action='store_true')
     args = parser.parse_args()
@@ -155,12 +181,13 @@ if __name__ == '__main__':
     MODEL_PATH = args.model_path
     data_train = args.train_dir
     data_test = args.test_dir
+    EMBED_PATH = args.embed_path
     USE_KALDI = args.use_kaldi
 
     # Load the data and create DataLoader instances
     if USE_KALDI:
-        train_data = VadETDatasetArk(data_train)
-        test_data = VadETDatasetArk(data_test)
+        train_data = VadETDatasetArk(data_train, EMBED_PATH)
+        test_data = VadETDatasetArk(data_test, EMBED_PATH)
     else:
         train_data = VadETDataset(data_train)
         test_data = VadETDataset(data_test)
