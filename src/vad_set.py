@@ -25,7 +25,7 @@ from glob import glob
 from vad import pad_collate
 
 # model hyper parameters
-num_epochs = 5
+num_epochs = 10
 batch_size = 128
 batch_size_test = 128
 
@@ -230,9 +230,8 @@ if __name__ == '__main__':
             if batch % 10 == 0:
                 print(f'Batch: {batch}, loss = {loss:.4f}')
 
-        if SCHEDULER:
-            if (epoch + 1) % 2 == 0:
-                scheduler.step() # learning rate adjust
+        if SCHEDULER and epoch < 2:
+            scheduler.step() # learning rate adjust
 
         # Test the model after each epoch
         with torch.no_grad():

@@ -18,7 +18,7 @@ import sys
 from glob import glob
 
 # model hyper parameters
-num_epochs = 3 
+num_epochs = 10
 batch_size = 256
 batch_size_test = 256
 
@@ -218,7 +218,7 @@ if __name__ == '__main__':
             if batch % 10 == 0:
                 print(f'Batch: {batch}, loss = {batch_loss.item():.4f}')
 
-        if SCHEDULER:
+        if SCHEDULER and epoch < 2:
             scheduler.step() # learning rate adjust
 
         # Test the model after each epoch
