@@ -23,6 +23,7 @@ import sys
 from glob import glob
 
 from vad import pad_collate
+from vad_et import WPL
 
 # model hyper parameters
 num_epochs = 10
@@ -43,6 +44,7 @@ MODEL_PATH = 'vad_set.pt'
 SAVE_MODEL = True
 
 USE_KALDI = False
+USE_WPL = False
 MULTI_GPU = False
 DATA_TRAIN_KALDI = 'data/train'
 DATA_TEST_KALDI = 'data/test'
@@ -51,6 +53,7 @@ DATA_TEST_KALDI = 'data/test'
 SCORE_TYPE = 0
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+WPL_WEIGHTS = torch.tensor([1.0, 0.1, 1.0]).to(device)
 
 class VadSETDatasetArk(Dataset):
     """VadSET training dataset. Uses kaldi scp and ark files."""
@@ -174,6 +177,7 @@ if __name__ == '__main__':
     parser.add_argument('--score_type', type=int, default=SCORE_TYPE)
     parser.add_argument('--model_path', type=str, default=MODEL_PATH)
     parser.add_argument('--use_kaldi', action='store_true')
+    parser.add_argument('--use_wpl', action='store_true')
     args = parser.parse_args()
 
     MODEL_PATH = args.model_path
@@ -182,6 +186,7 @@ if __name__ == '__main__':
     EMBED_PATH = args.embed_path
     USE_KALDI = args.use_kaldi
     SCORE_TYPE = args.score_type
+    USE_WPL = args.use_wpl
 
     if SCORE_TYPE not in [0, 1, 2]:
         print(f"Error: invalid scoring type: {SCORE_TYPE}. The values have to be in {0, 1, 2}.")
@@ -203,7 +208,10 @@ if __name__ == '__main__':
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
     model = VadSET(input_dim, hidden_dim, num_layers, out_dim).to(device)
-    criterion = nn.CrossEntropyLoss()
+    if USE_WPL:
+        criterion = WPL(WPL_WEIGHTS)
+    else:
+        criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     if SCHEDULER:
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.1)
