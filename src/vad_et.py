@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
+from torch.nn.functional import one_hot
 import torch.nn.functional as F
 import kaldiio
 import argparse as ap
@@ -41,11 +42,13 @@ MODEL_PATH = 'vad_et.pt'
 SAVE_MODEL = True
 
 USE_KALDI = False
+USE_WPL = False
 MULTI_GPU = False
 DATA_TRAIN_KALDI = 'data/train'
 DATA_TEST_KALDI = 'data/test'
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+WPL_WEIGHTS = torch.tensor([1.0, 0.1, 1.0]).to(device)
 
 class VadETDatasetArk(Dataset):
     """VadET training dataset. Uses kaldi scp and ark files."""
@@ -146,22 +149,44 @@ class VadET(nn.Module):
         return torch.stack([hidden, cell])
 
 
-def wpl(output, target, weights):
+class WPL(nn.Module):
     """Weighted pairwise loss
-
     The weight pairs are interpreted as follows:
     [<ns,tss> ; <ntss,ns> ; <tss,ntss>]
 
     target contains indexes, output is a tensor of probabilites for each class
-    (ns, ntss, tss) -> {0, 1, 2}
+    (ns, ntss, tss) -> {0, 1, 2} 
 
     """
 
+    def __init__(self, weights):
+        super(WPL, self).__init__()
+        self.weights = weights
+        assert len(weights) == 3, "The wpl is defined for three classes only."
 
-    mean = output[0]
-    return -mean
+    def forward(self, output, target):
+        minibatch_size = output.size()[0]
+        label_mask = one_hot(target) > 0.5 # boolean mask
+        label_mask_r1 = torch.roll(label_mask, 1, 1) # if ntss, then tss
+        label_mask_r2 = torch.roll(label_mask, 2, 1) # if ntss, then ns
 
+        # get the probability of the actual label and the other two into one array
+        actual = torch.exp(torch.masked_select(output, label_mask))
+        plus_one = torch.exp(torch.masked_select(output, label_mask_r1))
+        minus_one = torch.exp(torch.masked_select(output, label_mask_r2))
 
+        # arrays of the first pair weight and the second pair weight used in the equation
+        w1 = torch.masked_select(self.weights, label_mask) # if ntss, w1 is <ntss, ns>
+        w2 = torch.masked_select(self.weights, label_mask_r1) # if ntss, w2 is <tss, ntss>
+
+        # first pair
+        first_pair = w1 * torch.log(actual / (actual + plus_one))
+        second_pair = w2 * torch.log(actual / (actual + minus_one))
+
+        wpl = -0.5 * (first_pair + second_pair)
+
+        # sum and average for minibatch
+        return wpl.sum() / minibatch_size
 
 
 if __name__ == '__main__':
@@ -176,6 +201,7 @@ if __name__ == '__main__':
     parser.add_argument('--embed_path', type=str, default=EMBED_PATH)
     parser.add_argument('--model_path', type=str, default=MODEL_PATH)
     parser.add_argument('--use_kaldi', action='store_true')
+    parser.add_argument('--use_wpl', action='store_true')
     args = parser.parse_args()
 
     MODEL_PATH = args.model_path
@@ -183,6 +209,7 @@ if __name__ == '__main__':
     data_test = args.test_dir
     EMBED_PATH = args.embed_path
     USE_KALDI = args.use_kaldi
+    USE_WPL = args.use_wpl
 
     # Load the data and create DataLoader instances
     if USE_KALDI:
@@ -200,7 +227,10 @@ if __name__ == '__main__':
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
     model = VadET(input_dim, hidden_dim, num_layers, out_dim).to(device)
-    criterion = nn.CrossEntropyLoss()
+    if USE_WPL:
+        criterion = WPL(WPL_WEIGHTS)
+    else:
+        criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     if SCHEDULER:
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.1)
