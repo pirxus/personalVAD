@@ -165,7 +165,7 @@ class WPL(nn.Module):
         assert len(weights) == 3, "The wpl is defined for three classes only."
 
     def forward(self, output, target):
-        minibatch_size = output.size()[0]
+        minibatch_size = output.size(0)
         label_mask = one_hot(target) > 0.5 # boolean mask
         label_mask_r1 = torch.roll(label_mask, 1, 1) # if ntss, then tss
         label_mask_r2 = torch.roll(label_mask, 2, 1) # if ntss, then ns
@@ -180,8 +180,8 @@ class WPL(nn.Module):
         w2 = torch.masked_select(self.weights, label_mask_r1) # if ntss, w2 is <tss, ntss>
 
         # first pair
-        first_pair = w1 * torch.log(actual / (actual + plus_one))
-        second_pair = w2 * torch.log(actual / (actual + minus_one))
+        first_pair = w1 * torch.log(actual / (actual + minus_one))
+        second_pair = w2 * torch.log(actual / (actual + plus_one))
 
         wpl = -0.5 * (first_pair + second_pair)
 
@@ -228,6 +228,7 @@ if __name__ == '__main__':
 
     model = VadET(input_dim, hidden_dim, num_layers, out_dim).to(device)
     if USE_WPL:
+        print("Using the wpl..")
         criterion = WPL(WPL_WEIGHTS)
     else:
         criterion = nn.CrossEntropyLoss()
