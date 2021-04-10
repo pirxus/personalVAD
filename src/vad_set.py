@@ -226,11 +226,11 @@ if __name__ == '__main__':
             out_padded, _ = model(x_padded.to(device), x_lens, None)
 
             # compute the loss
-            loss = torch.zeros(3, device=device)
+            loss = 0
             for j in range(out_padded.size(0)):
                 loss += criterion(out_padded[j][:y_lens[j]], y_padded[j][:y_lens[j]])
 
-            loss = loss.sum() / batch_size # normalize loss for each batch..
+            loss /= batch_size # normalize for the batch
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()

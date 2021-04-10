@@ -48,7 +48,7 @@ DATA_TRAIN_KALDI = 'data/train'
 DATA_TEST_KALDI = 'data/test'
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-WPL_WEIGHTS = torch.tensor([1.0, 0.1, 1.0]).to(device)
+WPL_WEIGHTS = torch.tensor([1.0, 0.2, 1.0]).to(device)
 
 class VadETDatasetArk(Dataset):
     """VadET training dataset. Uses kaldi scp and ark files."""
@@ -123,7 +123,6 @@ class VadETDataset(Dataset):
 
         return None
 
-# TODO: implement the WPL loss function
 class VadET(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_layers, out_dim):
         super(VadET, self).__init__()
@@ -187,6 +186,7 @@ class WPL(nn.Module):
         first_pair = w1 * torch.log(actual / (actual + minus_one))
         second_pair = w2 * torch.log(actual / (actual + plus_one))
 
+        # get the negative mean value for the two pairs
         wpl = -0.5 * (first_pair + second_pair)
 
         # sum and average for minibatch
@@ -250,11 +250,11 @@ if __name__ == '__main__':
             out_padded, _ = model(x_padded.to(device), x_lens, None)
 
             # compute the loss
-            loss = torch.zeros(3, device=device)
+            loss = 0
             for j in range(out_padded.size(0)):
                 loss += criterion(out_padded[j][:y_lens[j]], y_padded[j][:y_lens[j]])
 
-            loss = loss.sum() / batch_size # normalize loss for each batch..
+            loss /= batch_size # normalize loss for each batch..
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()

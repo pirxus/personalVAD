@@ -205,18 +205,17 @@ if __name__ == '__main__':
             out_padded, _ = model(x_padded.to(device), x_lens, None)
 
             # compute the loss
-            batch_loss = 0.0
+            loss = 0
             for j in range(out_padded.size(0)):
-                loss = criterion(out_padded[j][:y_lens[j]],
+                loss += criterion(out_padded[j][:y_lens[j]],
                         torch.unsqueeze(y_padded[j][:y_lens[j]], 1))
-                batch_loss += loss
-            batch_loss /= batch_size # normalize for the batch
-            batch_loss.backward()
+            loss /= batch_size # normalize for the batch
+            loss.backward()
             optimizer.step()
             optimizer.zero_grad()
             
             if batch % 10 == 0:
-                print(f'Batch: {batch}, loss = {batch_loss.item():.4f}')
+                print(f'Batch: {batch}, loss = {loss.item():.4f}')
 
         if SCHEDULER and epoch < 2:
             scheduler.step() # learning rate adjust
