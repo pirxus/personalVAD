@@ -29,6 +29,7 @@ src/models/
 # Unwanted source files and libraries
 src/ikrlib.py
 ivec_extr/
+tsne/
 
 # Trash...
 file_list
