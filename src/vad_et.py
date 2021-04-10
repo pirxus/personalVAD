@@ -132,6 +132,8 @@ class VadET(nn.Module):
         self.out_dim = out_dim
 
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True)
+        self.fc1 = nn.Linear(hidden_dim, hidden_dim) #
+        self.relu = nn.Sigmoid() #
         self.fc = nn.Linear(hidden_dim, out_dim)
 
     def forward(self, x, x_lens, hidden):
@@ -139,6 +141,8 @@ class VadET(nn.Module):
         out_packed, hidden = self.lstm(x_packed, hidden)
         out_padded, _ = pad_packed_sequence(out_packed, batch_first=True)
 
+        out_padded = self.fc1(out_padded) #
+        out_padded = self.relu(out_padded) #
         out_padded = self.fc(out_padded)
         return out_padded, hidden
 

@@ -57,6 +57,8 @@ xvector_model = SpeakerRecognition.from_hparams(
         source="speechbrain/spkrec-xvect-voxceleb",
         savedir=tmpdir.name)
 
+relu = torch.nn.ReLU()
+
 if DVECTORS and not USE_NUMPY:
     dvector_writer = WriteHelper(f'ark,scp:{DEST}/dvectors.ark,{DEST}/dvectors.scp')
 if XVECTORS and not USE_NUMPY:
@@ -100,7 +102,14 @@ for directory in DIRECTORIES:
                 if XVECTORS:
                     # extract and save the xvector
                     utt = torch.cat(wavs_xvector, dim=1)
-                    xvector = xvector_model.encode_batch(utt).numpy().squeeze().squeeze()
+                    xvector = xvector_model.encode_batch(utt, normalize=False)
+
+                    # relu and L2 normalize the xvector
+                    xvector = relu(torch.squeeze(xvector))
+                    norm = torch.linalg.norm(xvector)
+                    xvector = xvector / norm
+
+                    xvector = xvector.numpy()
                     if not USE_NUMPY:
                         xvector_writer(speaker.name, xvector)
                     else:
