@@ -20,7 +20,7 @@ DIRECTORIES = ['dev-clean', 'dev-other', 'test-clean', 'test-other',
 
 N_WAVS = 2
 
-# program line arguments
+# command line arguments
 parser = ap.ArgumentParser(description="Extract speaker embeddings for the LibriSpeech dataset.")
 parser.add_argument('--libri_root', type=str, required=False, default=LIBRI_ROOT,
         help="Specify the path to the LibriSpeech dataset")
