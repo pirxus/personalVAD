@@ -24,7 +24,7 @@ from glob import glob
 from vad import pad_collate
 
 # model hyper parameters
-num_epochs = 10
+num_epochs = 2 
 batch_size = 128
 batch_size_test = 128
 
@@ -132,8 +132,8 @@ class VadET(nn.Module):
 
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True)
         self.fc1 = nn.Linear(hidden_dim, hidden_dim) #
-        self.relu = nn.Sigmoid() #
-        self.fc = nn.Linear(hidden_dim, out_dim)
+        self.relu = nn.LeakyReLU() #
+        self.fc2 = nn.Linear(hidden_dim, out_dim)
 
     def forward(self, x, x_lens, hidden):
         x_packed = pack_padded_sequence(x, x_lens, batch_first=True, enforce_sorted=False)
@@ -142,7 +142,7 @@ class VadET(nn.Module):
 
         out_padded = self.fc1(out_padded) #
         out_padded = self.relu(out_padded) #
-        out_padded = self.fc(out_padded)
+        out_padded = self.fc2(out_padded)
         return out_padded, hidden
 
     def init_hidden(self, batch_size):
@@ -204,6 +204,8 @@ if __name__ == '__main__':
     parser.add_argument('--test_dir', type=str, default=data_test)
     parser.add_argument('--embed_path', type=str, default=EMBED_PATH)
     parser.add_argument('--model_path', type=str, default=MODEL_PATH)
+    parser.add_argument('--load_model', type=str, default='')
+    parser.add_argument('--use_scheduler', action='store_true')
     parser.add_argument('--use_kaldi', action='store_true')
     parser.add_argument('--use_wpl', action='store_true')
     args = parser.parse_args()
@@ -214,6 +216,7 @@ if __name__ == '__main__':
     EMBED_PATH = args.embed_path
     USE_KALDI = args.use_kaldi
     USE_WPL = args.use_wpl
+    SCHEDULER = args.use_scheduler
 
     # Load the data and create DataLoader instances
     if USE_KALDI:
@@ -230,7 +233,18 @@ if __name__ == '__main__':
             dataset=test_data, num_workers=4, pin_memory=True,
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
-    model = VadET(input_dim, hidden_dim, num_layers, out_dim).to(device)
+    model = VadET(input_dim, hidden_dim, num_layers, out_dim)
+
+    if args.load_model != '':
+        try:
+            model.load_state_dict(torch.load(args.load_model))
+            lr = 1e-5
+        except:
+            print("couldn't load model")
+            sys.exit(1)
+
+    model = model.to(device)
+
     if USE_WPL:
         print("Using the wpl..")
         criterion = WPL(WPL_WEIGHTS)
@@ -264,6 +278,10 @@ if __name__ == '__main__':
 
         if SCHEDULER and epoch < 2:
             scheduler.step() # learning rate adjust
+            if epoch == 1:
+                lr = 5e-5
+        if SCHEDULER and epoch == 6:
+            lr = 1e-5
 
         # Test the model after each epoch
         with torch.no_grad():
