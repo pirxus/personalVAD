@@ -15,6 +15,8 @@ import torch.nn.functional as F
 import kaldiio
 import argparse as ap
 
+from sklearn.metrics import average_precision_score
+
 import numpy as np
 import pickle
 import os
@@ -24,7 +26,7 @@ from glob import glob
 from vad import pad_collate
 
 # model hyper parameters
-num_epochs = 2 
+num_epochs = 10
 batch_size = 128
 batch_size_test = 128
 
@@ -205,7 +207,6 @@ if __name__ == '__main__':
     parser.add_argument('--embed_path', type=str, default=EMBED_PATH)
     parser.add_argument('--model_path', type=str, default=MODEL_PATH)
     parser.add_argument('--load_model', type=str, default='')
-    parser.add_argument('--use_scheduler', action='store_true')
     parser.add_argument('--use_kaldi', action='store_true')
     parser.add_argument('--use_wpl', action='store_true')
     args = parser.parse_args()
@@ -216,7 +217,6 @@ if __name__ == '__main__':
     EMBED_PATH = args.embed_path
     USE_KALDI = args.use_kaldi
     USE_WPL = args.use_wpl
-    SCHEDULER = args.use_scheduler
 
     # Load the data and create DataLoader instances
     if USE_KALDI:
@@ -233,17 +233,7 @@ if __name__ == '__main__':
             dataset=test_data, num_workers=4, pin_memory=True,
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
-    model = VadET(input_dim, hidden_dim, num_layers, out_dim)
-
-    if args.load_model != '':
-        try:
-            model.load_state_dict(torch.load(args.load_model))
-            lr = 1e-5
-        except:
-            print("couldn't load model")
-            sys.exit(1)
-
-    model = model.to(device)
+    model = VadET(input_dim, hidden_dim, num_layers, out_dim).to(device)
 
     if USE_WPL:
         print("Using the wpl..")
@@ -253,6 +243,8 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     if SCHEDULER:
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.1)
+
+    softmax = nn.Softmax(dim=1)
 
     # Train!!! hype!!!
     for epoch in range(num_epochs):
@@ -280,7 +272,7 @@ if __name__ == '__main__':
             scheduler.step() # learning rate adjust
             if epoch == 1:
                 lr = 5e-5
-        if SCHEDULER and epoch == 6:
+        if SCHEDULER and epoch == 7:
             lr = 1e-5
 
         # Test the model after each epoch
@@ -288,6 +280,8 @@ if __name__ == '__main__':
             print("testing...")
             n_correct = 0
             n_samples = 0
+            targets = []
+            outputs = []
             for x_padded, y_padded, x_lens, y_lens in test_loader:
                 y_padded = y_padded.to(device)
 
@@ -300,8 +294,23 @@ if __name__ == '__main__':
                     n_samples += y_lens[j]
                     n_correct += torch.sum(classes == y_padded[j][:y_lens[j]]).item()
 
+                    # average precision
+                    p = softmax(out_padded[j][:y_lens[j]])
+                    outputs.append(p.cpu().numpy())
+                    targets.append(y_padded[j][:y_lens[j]].cpu().numpy())
+
             acc = 100.0 * n_correct / n_samples
             print(f"accuracy = {acc:.2f}")
+
+            # and run the AP
+            targets = np.concatenate(targets)
+            outputs = np.concatenate(outputs)
+            targets_oh = np.eye(3)[targets]
+            out_AP = average_precision_score(targets_oh, outputs, average=None)
+            mAP = average_precision_score(targets_oh, outputs, average='micro')
+
+            print(out_AP)
+            print(f"mAP: {mAP}")
 
         # Save the model (after each epoch just to be sure...)
         if SAVE_MODEL:

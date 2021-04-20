@@ -16,7 +16,7 @@ from glob import glob
 from vad import pad_collate
 
 # model hyper parameters
-num_epochs = 7
+num_epochs = 3
 batch_size = 64
 batch_size_test = 64
 

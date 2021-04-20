@@ -18,13 +18,14 @@ import sys
 from glob import glob
 
 # model hyper parameters
-num_epochs = 10
-batch_size = 256
-batch_size_test = 256
+num_epochs = 6
+batch_size = 128
+batch_size_test = 128
 
 input_dim = 40
 hidden_dim = 64
 num_layers = 2
+out_dim = 2
 lr = 1e-3
 SCHEDULER = True
 
@@ -63,10 +64,10 @@ class VadDatasetArk(Dataset):
         y = self.labels[key]
 
         if CONVERT_LABELS:
-            y = (y != 0).astype('float32')
+            y = (y != 0).astype('int')
 
         x = torch.from_numpy(x).float()
-        y = torch.from_numpy(y).float()
+        y = torch.from_numpy(y).long()
         return x, y
 
 class VadDataset(Dataset):
@@ -104,22 +105,26 @@ class VadDataset(Dataset):
         return None
 
 class Vad(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_layers):
+    def __init__(self, input_dim, hidden_dim, num_layers, out_dim):
         super(Vad, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
+        self.out_dim = out_dim
 
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, 1)
-        self.sigmoid = nn.Sigmoid()
+        self.fc1 = nn.Linear(hidden_dim, hidden_dim) #
+        self.relu = nn.LeakyReLU() #
+        self.fc2 = nn.Linear(hidden_dim, out_dim)
 
     def forward(self, x, x_lens, hidden):
         x_packed = pack_padded_sequence(x, x_lens, batch_first=True, enforce_sorted=False)
         out_packed, hidden = self.lstm(x_packed, hidden)
         out_padded, _ = pad_packed_sequence(out_packed, batch_first=True)
 
-        out_padded = self.fc(out_padded)
-        out_padded = self.sigmoid(out_padded)
+        out_padded = self.fc1(out_padded) #
+        out_padded = self.relu(out_padded) #
+        out_padded = self.fc2(out_padded)
+        #out_padded = self.sigmoid(out_padded)
         return out_padded, hidden
 
     def init_hidden(self, batch_size):
@@ -184,16 +189,18 @@ if __name__ == '__main__':
             dataset=test_data, num_workers=4, pin_memory=True,
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
-    net = Vad(input_dim, hidden_dim, num_layers).to(device)
+    net = Vad(input_dim, hidden_dim, num_layers, out_dim).to(device)
     if MULTI_GPU:
         model = torch.nn.DataParallel(net)
     else:
         model = net
 
-    criterion = nn.BCELoss()
+    criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     if SCHEDULER:
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.1)
+
+    softmax = nn.Softmax(dim=1)
 
     # Train!!! hype!!!
     for epoch in range(num_epochs):
@@ -207,8 +214,8 @@ if __name__ == '__main__':
             # compute the loss
             loss = 0
             for j in range(out_padded.size(0)):
-                loss += criterion(out_padded[j][:y_lens[j]],
-                        torch.unsqueeze(y_padded[j][:y_lens[j]], 1))
+                loss += criterion(out_padded[j][:y_lens[j]], y_padded[j][:y_lens[j]])
+
             loss /= batch_size # normalize for the batch
             loss.backward()
             optimizer.step()
@@ -219,25 +226,47 @@ if __name__ == '__main__':
 
         if SCHEDULER and epoch < 2:
             scheduler.step() # learning rate adjust
+            if epoch == 1:
+                lr = 5e-5
+        if epoch == 4:
+            lr = 1e-5
 
         # Test the model after each epoch
         with torch.no_grad():
             print("testing...")
             n_correct = 0
             n_samples = 0
+            targets = []
+            outputs = []
             for x_padded, y_padded, x_lens, y_lens in test_loader:
                 y_padded = y_padded.to(device)
 
+                # pass the data through the model
                 out_padded, _ = model(x_padded.to(device), x_lens, None)
 
                 # value, index
                 for j in range(out_padded.size(0)):
-                    predictions = (out_padded[j][:y_lens[j]] > 0.5).float().cuda()
+                    classes = torch.argmax(out_padded[j][:y_lens[j]], dim=1)
                     n_samples += y_lens[j]
-                    n_correct += torch.sum(predictions.squeeze() == y_padded[j][:y_lens[j]]).item()
+                    n_correct += torch.sum(classes == y_padded[j][:y_lens[j]]).item()
+
+                    # average precision
+                    p = softmax(out_padded[j][:y_lens[j]])
+                    outputs.append(p.cpu().numpy())
+                    targets.append(y_padded[j][:y_lens[j]].cpu().numpy())
 
             acc = 100.0 * n_correct / n_samples
             print(f"accuracy = {acc:.2f}")
+
+            # and run the AP
+            targets = np.concatenate(targets)
+            outputs = np.concatenate(outputs)
+            targets_oh = np.eye(2)[targets]
+            out_AP = average_precision_score(targets_oh, outputs, average=None)
+            mAP = average_precision_score(targets_oh, outputs, average='micro')
+
+            print(out_AP)
+            print(f"mAP: {mAP}")
 
         # Save the model - after each epoch for ensurance...
         if SAVE_MODEL:

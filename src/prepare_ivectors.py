@@ -26,7 +26,7 @@ args = parser.parse_args()
 LIBRI_ROOT = args.libri_root
 DEST = args.list_out
 DIRECTORIES = args.parts
-N_WAVS = 3
+N_WAVS = 2
 
 # create the destination directory
 try:

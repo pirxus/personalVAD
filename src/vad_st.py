@@ -15,6 +15,8 @@ import torch.nn.functional as F
 import kaldiio
 import argparse as ap
 
+from sklearn.metrics import average_precision_score
+
 import numpy as np
 import pickle
 import os
@@ -128,14 +130,18 @@ class VadST(nn.Module):
         self.out_dim = out_dim
 
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, out_dim)
+        self.fc1 = nn.Linear(hidden_dim, hidden_dim) #
+        self.relu = nn.LeakyReLU() #
+        self.fc2 = nn.Linear(hidden_dim, out_dim)
 
     def forward(self, x, x_lens, hidden):
         x_packed = pack_padded_sequence(x, x_lens, batch_first=True, enforce_sorted=False)
         out_packed, hidden = self.lstm(x_packed, hidden)
         out_padded, _ = pad_packed_sequence(out_packed, batch_first=True)
 
-        out_padded = self.fc(out_padded)
+        out_padded = self.fc1(out_padded) #
+        out_padded = self.relu(out_padded) #
+        out_padded = self.fc2(out_padded)
         return out_padded, hidden
 
     def init_hidden(self, batch_size):
@@ -194,6 +200,8 @@ if __name__ == '__main__':
     if SCHEDULER:
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.1)
 
+    softmax = nn.Softmax(dim=1)
+
     # Train!!! hype!!!
     for epoch in range(num_epochs):
         print(f"====== Starting epoch {epoch} ======")
@@ -216,14 +224,20 @@ if __name__ == '__main__':
             if batch % 10 == 0:
                 print(f'Batch: {batch}, loss = {loss:.4f}')
 
-        if SCHEDULER and epoch < 3 and epoch != 1:
+        if SCHEDULER and epoch < 2:
             scheduler.step() # learning rate adjust
+            if epoch == 1:
+                lr = 5e-5
+        if epoch == 4:
+            lr = 1e-5
 
         # Test the model after each epoch
         with torch.no_grad():
             print("testing...")
             n_correct = 0
             n_samples = 0
+            targets = []
+            outputs = []
             for x_padded, y_padded, x_lens, y_lens in test_loader:
                 y_padded = y_padded.to(device)
 
@@ -236,8 +250,23 @@ if __name__ == '__main__':
                     n_samples += y_lens[j]
                     n_correct += torch.sum(classes == y_padded[j][:y_lens[j]]).item()
 
+                    # average precision
+                    p = softmax(out_padded[j][:y_lens[j]])
+                    outputs.append(p.cpu().numpy())
+                    targets.append(y_padded[j][:y_lens[j]].cpu().numpy())
+
             acc = 100.0 * n_correct / n_samples
             print(f"accuracy = {acc:.2f}")
+
+            # and run the AP
+            targets = np.concatenate(targets)
+            outputs = np.concatenate(outputs)
+            targets_oh = np.eye(3)[targets]
+            out_AP = average_precision_score(targets_oh, outputs, average=None)
+            mAP = average_precision_score(targets_oh, outputs, average='micro')
+
+            print(out_AP)
+            print(f"mAP: {mAP}")
 
         # Save the model - after each epoch for ensurance...
         if SAVE_MODEL:
