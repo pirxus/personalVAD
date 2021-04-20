@@ -24,8 +24,7 @@ import os
 import sys
 from glob import glob
 
-from vad import pad_collate
-from vad_et import WPL
+from personal_vad import PersonalVAD, WPL, pad_collate
 
 # model hyper parameters
 num_epochs = 10
@@ -47,7 +46,6 @@ SAVE_MODEL = True
 
 USE_KALDI = False
 USE_WPL = False
-MULTI_GPU = False
 DATA_TRAIN_KALDI = 'data/train'
 DATA_TEST_KALDI = 'data/test'
 
@@ -141,31 +139,6 @@ class VadSETDataset(Dataset):
 
         return None
 
-# TODO: implement the WPL loss function
-class VadSET(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_layers, out_dim):
-        super(VadSET, self).__init__()
-        self.hidden_dim = hidden_dim
-        self.num_layers = num_layers
-        self.out_dim = out_dim
-
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, out_dim)
-
-    def forward(self, x, x_lens, hidden):
-        x_packed = pack_padded_sequence(x, x_lens, batch_first=True, enforce_sorted=False)
-        out_packed, hidden = self.lstm(x_packed, hidden)
-        out_padded, _ = pad_packed_sequence(out_packed, batch_first=True)
-
-        out_padded = self.fc(out_padded)
-        return out_padded, hidden
-
-    def init_hidden(self, batch_size):
-        weight = next(self.parameters()).data
-        hidden = weight.new(self.num_layers, batch_size, self.hidden_dim)
-        cell = weight.new(self.num_layers, batch_size, self.hidden_dim)
-        return torch.stack([hidden, cell])
-
 if __name__ == '__main__':
     # default data path
     data_train = DATA_TRAIN_KALDI if USE_KALDI else DATA_TRAIN
@@ -180,6 +153,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_path', type=str, default=MODEL_PATH)
     parser.add_argument('--use_kaldi', action='store_true')
     parser.add_argument('--use_wpl', action='store_true')
+    parser.add_argument('--nuse_fc', action='store_false')
     args = parser.parse_args()
 
     MODEL_PATH = args.model_path
@@ -209,7 +183,8 @@ if __name__ == '__main__':
             dataset=test_data, num_workers=4, pin_memory=True,
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
-    model = VadSET(input_dim, hidden_dim, num_layers, out_dim).to(device)
+    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc).to(device)
+
     if USE_WPL:
         criterion = WPL(WPL_WEIGHTS)
     else:

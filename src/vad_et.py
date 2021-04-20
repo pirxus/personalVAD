@@ -23,7 +23,7 @@ import os
 import sys
 from glob import glob
 
-from vad import pad_collate
+from personal_vad import PersonalVAD, WPL, pad_collate
 
 # model hyper parameters
 num_epochs = 10
@@ -45,12 +45,11 @@ SAVE_MODEL = True
 
 USE_KALDI = False
 USE_WPL = False
-MULTI_GPU = False
 DATA_TRAIN_KALDI = 'data/train'
 DATA_TEST_KALDI = 'data/test'
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-WPL_WEIGHTS = torch.tensor([1.0, 0.2, 1.0]).to(device)
+WPL_WEIGHTS = torch.tensor([1.0, 0.1, 1.0]).to(device)
 
 class VadETDatasetArk(Dataset):
     """VadET training dataset. Uses kaldi scp and ark files."""
@@ -125,76 +124,6 @@ class VadETDataset(Dataset):
 
         return None
 
-class VadET(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_layers, out_dim):
-        super(VadET, self).__init__()
-        self.hidden_dim = hidden_dim
-        self.num_layers = num_layers
-        self.out_dim = out_dim
-
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True)
-        self.fc1 = nn.Linear(hidden_dim, hidden_dim) #
-        self.relu = nn.LeakyReLU() #
-        self.fc2 = nn.Linear(hidden_dim, out_dim)
-
-    def forward(self, x, x_lens, hidden):
-        x_packed = pack_padded_sequence(x, x_lens, batch_first=True, enforce_sorted=False)
-        out_packed, hidden = self.lstm(x_packed, hidden)
-        out_padded, _ = pad_packed_sequence(out_packed, batch_first=True)
-
-        out_padded = self.fc1(out_padded) #
-        out_padded = self.relu(out_padded) #
-        out_padded = self.fc2(out_padded)
-        return out_padded, hidden
-
-    def init_hidden(self, batch_size):
-        weight = next(self.parameters()).data
-        hidden = weight.new(self.num_layers, batch_size, self.hidden_dim)
-        cell = weight.new(self.num_layers, batch_size, self.hidden_dim)
-        return torch.stack([hidden, cell])
-
-
-class WPL(nn.Module):
-    """Weighted pairwise loss
-    The weight pairs are interpreted as follows:
-    [<ns,tss> ; <ntss,ns> ; <tss,ntss>]
-
-    target contains indexes, output is a tensor of probabilites for each class
-    (ns, ntss, tss) -> {0, 1, 2} 
-
-    """
-
-    def __init__(self, weights):
-        super(WPL, self).__init__()
-        self.weights = weights
-        assert len(weights) == 3, "The wpl is defined for three classes only."
-
-    def forward(self, output, target):
-        minibatch_size = output.size(0)
-        label_mask = one_hot(target) > 0.5 # boolean mask
-        label_mask_r1 = torch.roll(label_mask, 1, 1) # if ntss, then tss
-        label_mask_r2 = torch.roll(label_mask, 2, 1) # if ntss, then ns
-
-        # get the probability of the actual label and the other two into one array
-        actual = torch.exp(torch.masked_select(output, label_mask))
-        plus_one = torch.exp(torch.masked_select(output, label_mask_r1))
-        minus_one = torch.exp(torch.masked_select(output, label_mask_r2))
-
-        # arrays of the first pair weight and the second pair weight used in the equation
-        w1 = torch.masked_select(self.weights, label_mask) # if ntss, w1 is <ntss, ns>
-        w2 = torch.masked_select(self.weights, label_mask_r1) # if ntss, w2 is <tss, ntss>
-
-        # first pair
-        first_pair = w1 * torch.log(actual / (actual + minus_one))
-        second_pair = w2 * torch.log(actual / (actual + plus_one))
-
-        # get the negative mean value for the two pairs
-        wpl = -0.5 * (first_pair + second_pair)
-
-        # sum and average for minibatch
-        return wpl.sum() / minibatch_size
-
-
 if __name__ == '__main__':
     # default data path
     data_train = DATA_TRAIN_KALDI if USE_KALDI else DATA_TRAIN
@@ -206,9 +135,10 @@ if __name__ == '__main__':
     parser.add_argument('--test_dir', type=str, default=data_test)
     parser.add_argument('--embed_path', type=str, default=EMBED_PATH)
     parser.add_argument('--model_path', type=str, default=MODEL_PATH)
-    parser.add_argument('--load_model', type=str, default='')
+    parser.add_argument('--wpl_weight', type=float, default=0.1)
     parser.add_argument('--use_kaldi', action='store_true')
     parser.add_argument('--use_wpl', action='store_true')
+    parser.add_argument('--nuse_fc', action='store_false')
     args = parser.parse_args()
 
     MODEL_PATH = args.model_path
@@ -217,6 +147,7 @@ if __name__ == '__main__':
     EMBED_PATH = args.embed_path
     USE_KALDI = args.use_kaldi
     USE_WPL = args.use_wpl
+    WPL_WEIGHTS[1] = args.wpl_weight
 
     # Load the data and create DataLoader instances
     if USE_KALDI:
@@ -233,7 +164,7 @@ if __name__ == '__main__':
             dataset=test_data, num_workers=4, pin_memory=True,
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
-    model = VadET(input_dim, hidden_dim, num_layers, out_dim).to(device)
+    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc).to(device)
 
     if USE_WPL:
         print("Using the wpl..")

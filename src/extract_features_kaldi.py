@@ -218,7 +218,7 @@ def extract_features(scp, q_send, q_return):
 
             # scores, linearly interpolated, starting from 0.5 every time
             # first 160 frames..
-            scores_lin = np.linspace(0.5, scores_slices[0], 160, endpoint=False)
+            scores_lin = np.kron(scores_slices[0], np.ones(160, dtype='float32'))
             # now the rest...
             for i, s in enumerate(scores_slices[1:]):
                 scores_lin = np.append(scores_lin,
@@ -252,7 +252,7 @@ def extract_features(scp, q_send, q_return):
             if label == '':
                 labels[stamp_prev:stamp] = 0
             elif label == '$':
-                which -= 1;
+                which -= 1; # decrement the target speaker indicator
                 labels[stamp_prev:stamp] = 0
             else:
                 if which == 0: # tss
