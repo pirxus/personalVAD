@@ -10,7 +10,6 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
-from torch.nn.functional import one_hot
 import torch.nn.functional as F
 import kaldiio
 import argparse as ap
@@ -167,7 +166,7 @@ if __name__ == '__main__':
     model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc).to(device)
 
     if USE_WPL:
-        print("Using the wpl..")
+        print("Using the wpl.. ", WPL_WEIGHTS)
         criterion = WPL(WPL_WEIGHTS)
     else:
         criterion = nn.CrossEntropyLoss()
