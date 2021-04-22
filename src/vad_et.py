@@ -201,9 +201,9 @@ if __name__ == '__main__':
         if SCHEDULER and epoch < 2:
             scheduler.step() # learning rate adjust
             if epoch == 1:
-                lr = 5e-5
+                optimizer.param_groups[0]['lr'] = 5e-5
         if SCHEDULER and epoch == 7:
-            lr = 1e-5
+            optimizer.param_groups[0]['lr'] = 1e-5
 
         # Test the model after each epoch
         with torch.no_grad():
