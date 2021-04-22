@@ -55,21 +55,21 @@ class WPL(nn.Module):
 
     """
 
-    def __init__(self, weights=[1.0, 0.1, 1.0]):
+    def __init__(self, weights=torch.tensor([1.0, 0.1, 1.0])):
         super(WPL, self).__init__()
         self.weights = weights
         assert len(weights) == 3, "The wpl is defined for three classes only."
 
     def forward(self, output, target):
-        minibatch_size = output.size(0)
+        output = torch.exp(output)
         label_mask = one_hot(target) > 0.5 # boolean mask
         label_mask_r1 = torch.roll(label_mask, 1, 1) # if ntss, then tss
         label_mask_r2 = torch.roll(label_mask, 2, 1) # if ntss, then ns
 
         # get the probability of the actual label and the other two into one array
-        actual = torch.exp(torch.masked_select(output, label_mask))
-        plus_one = torch.exp(torch.masked_select(output, label_mask_r1))
-        minus_one = torch.exp(torch.masked_select(output, label_mask_r2))
+        actual = torch.masked_select(output, label_mask)
+        plus_one = torch.masked_select(output, label_mask_r1)
+        minus_one = torch.masked_select(output, label_mask_r2)
 
         # arrays of the first pair weight and the second pair weight used in the equation
         w1 = torch.masked_select(self.weights, label_mask) # if ntss, w1 is <ntss, ns>
@@ -83,7 +83,7 @@ class WPL(nn.Module):
         wpl = -0.5 * (first_pair + second_pair)
 
         # sum and average for minibatch
-        return wpl.sum() / minibatch_size
+        return torch.mean(a) 
 
 def pad_collate(batch):
     """Padding function used to deal with batches of sequences of variable lengths.
