@@ -5,12 +5,13 @@ from torch.nn.functional import one_hot
 import torch.nn.functional as F
 
 class PersonalVAD(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_layers, out_dim, use_fc=True):
+    def __init__(self, input_dim, hidden_dim, num_layers, out_dim, use_fc=True, linear=False):
         super(PersonalVAD, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.out_dim = out_dim
         self.use_fc = use_fc
+        self.linear = linear
 
         # define the model layers...
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True)
@@ -18,7 +19,8 @@ class PersonalVAD(nn.Module):
         # use the original PersonalVAD configuration with one additional layer
         if use_fc:
             self.fc1 = nn.Linear(hidden_dim, hidden_dim)
-            self.tanh = nn.Tanh()
+            if not self.linear:
+                self.tanh = nn.Tanh()
         self.fc2 = nn.Linear(hidden_dim, out_dim)
 
     def forward(self, x, x_lens, hidden):
@@ -31,7 +33,8 @@ class PersonalVAD(nn.Module):
         # pass them through an additional layer if specified...
         if self.use_fc:
             out_padded = self.fc1(out_padded)
-            out_padded = self.tanh(out_padded)
+            if not self.linear:
+                out_padded = self.tanh(out_padded)
 
         out_padded = self.fc2(out_padded)
         return out_padded, hidden
@@ -83,7 +86,7 @@ class WPL(nn.Module):
         wpl = -0.5 * (first_pair + second_pair)
 
         # sum and average for minibatch
-        return torch.mean(a) 
+        return torch.mean(wpl) 
 
 def pad_collate(batch):
     """Padding function used to deal with batches of sequences of variable lengths.
