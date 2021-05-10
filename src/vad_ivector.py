@@ -42,7 +42,7 @@ DATA_TEST_KALDI = 'data/test'
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 WPL_WEIGHTS = torch.tensor([1.0, 0.1, 1.0]).to(device)
 
-class VadETDatasetArkX(Dataset):
+class VadETDatasetArkI(Dataset):
     """VadET training dataset. Uses kaldi scp and ark files."""
 
     def __init__(self, root_dir, embed_path):
@@ -104,8 +104,8 @@ if __name__ == '__main__':
 
     # Load the data and create DataLoader instances
     if USE_KALDI:
-        train_data = VadETDatasetArkX(data_train, EMBED_PATH)
-        test_data = VadETDatasetArkX(data_test, EMBED_PATH)
+        train_data = VadETDatasetArkI(data_train, EMBED_PATH)
+        test_data = VadETDatasetArkI(data_test, EMBED_PATH)
     else:
         train_data = VadETDataset(data_train)
         test_data = VadETDataset(data_test)

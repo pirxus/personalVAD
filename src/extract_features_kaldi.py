@@ -15,7 +15,6 @@ SV scores. All of the previous is then saved into an ark file.
 import os
 import sys
 import numpy as np
-#from numpy.lib.stride_tricks import sliding_window_view
 import kaldiio
 import random
 import librosa
@@ -173,17 +172,7 @@ def extract_features(scp, q_send, q_return):
             which = np.random.randint(0, n_speakers) 
             spk_embed, spk_id = load_dvector(utt_id, which, embed_scp)
 
-        # get the partial utterances for the current utterance, but bypas the
-        # resemblyzer's wav_preprocess function - we don't want any vad preprocessing
-
         # send the datata to be processed on the gpu and retreive the result
-        #try:
-        #    fbanks_sliced = sliding_window_view(fbanks, (160, 40)
-        #            ).squeeze(axis=1)[::frame_step].copy()
-        #except:
-        #    print(f"slice failed: fbanks.shape {fbanks.shape}, arr.shape {arr.shape}")
-        #    continue
-
         # prepare the fbanks tensor
         fbanks_tensor = torch.unsqueeze(torch.from_numpy(fbanks), 0)
         q_send.put((fbanks_tensor, torch.from_numpy(fbanks_sliced), pid))
