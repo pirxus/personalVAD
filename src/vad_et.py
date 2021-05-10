@@ -25,7 +25,7 @@ from glob import glob
 from personal_vad import PersonalVAD, WPL, pad_collate
 
 # model hyper parameters
-num_epochs = 10
+num_epochs = 13
 batch_size = 128
 batch_size_test = 128
 
@@ -163,7 +163,7 @@ if __name__ == '__main__':
             dataset=test_data, num_workers=4, pin_memory=True,
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
-    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc).to(device)
+    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc, linear=True).to(device)
 
     if USE_WPL:
         print("Using the wpl.. ", WPL_WEIGHTS)

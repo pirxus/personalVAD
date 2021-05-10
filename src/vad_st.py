@@ -26,7 +26,7 @@ from glob import glob
 from personal_vad import PersonalVAD, WPL, pad_collate
 
 # model hyper parameters
-num_epochs = 6
+num_epochs = 8
 batch_size = 128
 batch_size_test = 128
 
@@ -161,7 +161,7 @@ if __name__ == '__main__':
             dataset=test_data, num_workers=4, pin_memory=True,
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
-    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc).to(device)
+    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc, linear=False).to(device)
 
     if USE_WPL:
         criterion = WPL(WPL_WEIGHTS)
@@ -198,9 +198,9 @@ if __name__ == '__main__':
         if SCHEDULER and epoch < 2:
             scheduler.step() # learning rate adjust
             if epoch == 1:
-                lr = 5e-5
-        if epoch == 4:
-            lr = 1e-5
+                optimizer.param_groups[0]['lr'] = 5e-5
+        if SCHEDULER and epoch == 5:
+            optimizer.param_groups[0]['lr'] = 1e-5
 
         # Test the model after each epoch
         with torch.no_grad():

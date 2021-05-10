@@ -54,14 +54,22 @@ samples_per_frame = 160
 frame_step = int(np.round((16000 / rate) / samples_per_frame))
 min_coverage = 0.5
 
-def load_dvector(utt_id, spk_idx, embed_scp):
+def load_dvector(utt_id, spk_idx, embed_scp, select_random=False):
     """Load the dvector for the target speaker"""
 
     # get the speaker id
     if "rev1-" in utt_id: # just care for the old reverberation prefix...
         utt_id = utt_id[5:]
     spk_id = utt_id.split('_')[spk_idx].split('-')[0]
-    embedding = embed_scp[spk_id]
+
+    if select_random:
+        spk_id2 = spk_id
+        while spk_id2 == spk_id:
+            spk_id2, embedding = random.choice(list(embed_scp.items()))
+
+        spk_id = spk_id2
+    else:
+        embedding = embed_scp[spk_id]
     return embedding, spk_id
 
 def gpu_worker(q_send, q_return):
@@ -96,7 +104,6 @@ def extract_features(scp, q_send, q_return):
     pid = int(scp.rpartition('.')[0].rpartition('_')[2]) # NOTE: critical for queue functionality
     array_writer = WriteHelper(f'ark,scp:{DEST}fbanks_{pid}.ark,{DEST}fbanks_{pid}.scp')
     score_writer = WriteHelper(f'ark,scp:{DEST}scores_{pid}.ark,{DEST}scores_{pid}.scp')
-    #embed_writer = WriteHelper(f'ark,scp:{DEST}embed_{pid}.ark,{DEST}embed_{pid}.scp')
     label_writer = WriteHelper(f'ark,scp:{DEST}labels_{pid}.ark,{DEST}labels_{pid}.scp')
     target_writer = open(f'{DEST}targets_{pid}.scp', 'w')
     embed_scp = kaldiio.load_scp(f'{EMBED}/dvectors.scp')
@@ -155,19 +162,16 @@ def extract_features(scp, q_send, q_return):
         # make a one speaker utterance without a target speaker to mitigate
         # overfitting for the target speaker class
         if TS_DROPOUT and n_speakers == 1 and CACHE_DVECTORS:
-            #use_target = bool(np.random.randint(0, 3))
-            use_target = True # just use the target speaker... it's proportional..
-            if use_target or embedding_cache == {}:
+            use_target = bool(np.random.randint(0, 3))
+            #use_target = True # just use the target speaker... it's proportional..
+            if use_target:
                 # target speaker
                 which = 0
                 spk_embed, spk_id = load_dvector(utt_id, which, embed_scp)
 
             else:
-                # get a random speaker embedding ?? other than the current one ??
-                if 'rev' in utt_id: spk_id = utt_id.partition('-')[2]
-                spk_id = utt_id.split('-')[0]
-                rnd_spk_id, spk_embed = random.choice(list(embedding_cache.items()))
-                which = -1 if rnd_spk_id != spk_id else 0
+                which = -1 
+                spk_embed, spk_id = load_dvector(utt_id, which, embed_scp, select_random=True)
 
         else:
             which = np.random.randint(0, n_speakers) 
@@ -268,7 +272,6 @@ def extract_features(scp, q_send, q_return):
         # write the extracted features to the scp and ark files..
         array_writer(utt_id, logfbanks)
         score_writer(utt_id, scores)
-        #embed_writer(utt_id, spk_embed)
         label_writer(utt_id, labels)
         target_writer.write(f"{utt_id} {spk_id}\n") # write the target speaker too..
 
@@ -278,8 +281,6 @@ def extract_features(scp, q_send, q_return):
             array_writer.fscp.flush()
             score_writer.fark.flush()
             score_writer.fscp.flush()
-            #embed_writer.fark.flush()
-            #embed_writer.fscp.flush()
             label_writer.fark.flush()
             label_writer.fscp.flush()
             target_writer.flush()
@@ -288,7 +289,6 @@ def extract_features(scp, q_send, q_return):
     wav_scp.close()
     array_writer.close()
     score_writer.close()
-    #embed_writer.close()
     label_writer.close()
     target_writer.close()
 

@@ -7,6 +7,8 @@ import torch.nn.functional as F
 import kaldiio
 import argparse as ap
 
+from sklearn.metrics import average_precision_score
+
 import numpy as np
 import pickle
 import os
@@ -16,7 +18,7 @@ from glob import glob
 from personal_vad import PersonalVAD, WPL, pad_collate
 
 # model hyper parameters
-num_epochs = 3
+num_epochs = 10
 batch_size = 64
 batch_size_test = 64
 
@@ -117,7 +119,7 @@ if __name__ == '__main__':
             dataset=test_data, num_workers=4, pin_memory=True,
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
-    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc).to(device)
+    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc, linear=True).to(device)
 
     if USE_WPL:
         criterion = WPL(WPL_WEIGHTS)
@@ -154,9 +156,9 @@ if __name__ == '__main__':
         if SCHEDULER and epoch < 2:
             scheduler.step() # learning rate adjust
             if epoch == 1:
-                lr = 5e-5
+                optimizer.param_groups[0]['lr'] = 5e-5
         if SCHEDULER and epoch == 7:
-            lr = 1e-5
+            optimizer.param_groups[0]['lr'] = 1e-5
 
         # Test the model after each epoch
         with torch.no_grad():

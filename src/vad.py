@@ -142,7 +142,7 @@ if __name__ == '__main__':
             dataset=test_data, num_workers=4, pin_memory=True,
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
-    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc).to(device)
+    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc, linear=True).to(device)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -176,9 +176,9 @@ if __name__ == '__main__':
         if SCHEDULER and epoch < 2:
             scheduler.step() # learning rate adjust
             if epoch == 1:
-                lr = 5e-5
-        if epoch == 4:
-            lr = 1e-5
+                optimizer.param_groups[0]['lr'] = 5e-5
+        if SCHEDULER and epoch == 4:
+            optimizer.param_groups[0]['lr'] = 1e-5
 
         # Test the model after each epoch
         with torch.no_grad():

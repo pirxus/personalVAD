@@ -32,6 +32,7 @@ parser.add_argument('--dvector', action='store_true',
         help="Extract d-vectors")
 parser.add_argument('--xvector', action='store_true',
         help="Extract x-vectors")
+parser.add_argument('--norm_xvec', action='store_true')
 parser.add_argument('--use_numpy', action='store_true',
         help="Save the individual embeddings in the *.npy format instead of scp/ark")
 parser.add_argument('parts', type=str, nargs='*', default=DIRECTORIES,
@@ -101,7 +102,10 @@ for directory in DIRECTORIES:
                 if XVECTORS:
                     # extract and save the xvector
                     utt = torch.cat(wavs_xvector, dim=1)
-                    xvector = xvector_model.encode_batch(utt, normalize=False)
+                    if args.norm_xvec:
+                        xvector = xvector_model.encode_batch(utt, normalize=True)
+                    else:
+                        xvector = xvector_model.encode_batch(utt, normalize=False)
 
                     # L2 normalize the xvector
                     xvector = torch.squeeze(xvector)
