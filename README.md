@@ -1,3 +1,4 @@
+![Personal VAD](doc/pvad_thumbnail.png)
 # personalVAD
 Bachelor's thesis project
 
