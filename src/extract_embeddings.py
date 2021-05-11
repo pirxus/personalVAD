@@ -1,5 +1,11 @@
-"""Extracts and saves speaker embedding vectors for each speaker in the LibriSpeech dataset
-and saves them into an ark and an scp file.
+"""@package extract_embeddings
+
+Author: Simon Sedlacek
+Email: xsedla1h@stud.fit.vutbr.cz
+
+Extract and save d-vector and x-vector speaker embedding vectors for each
+speaker in the LibriSpeech dataset and saves them into an ark and an scp file.
+
 """
 
 import numpy as np

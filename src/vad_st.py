@@ -1,9 +1,13 @@
 """@package vad_st
 
-This module implements the ST vad architecture from {paper_link}. The input for this architecture
-consists of a 41-dimensional feature vector of which 40 values are our extracted logfbank
-energies and the other one feature is the speaker verification score for that particular frame.
-TODO: maybe interpolate the speaker verification scores?
+Author: Simon Sedlacek
+Email: xsedla1h@stud.fit.vutbr.cz
+
+This module implements the ST personal VAD architecture training loop.
+
+The input for this architecture is a 41-dimensional feature vector combining
+the 40-dimensional log Mel-filterbank energies and the array of speaker
+verfication scores for each frame.
 
 """
 
@@ -18,10 +22,7 @@ import argparse as ap
 from sklearn.metrics import average_precision_score
 
 import numpy as np
-import pickle
 import os
-import sys
-from glob import glob
 
 from personal_vad import PersonalVAD, WPL, pad_collate
 
@@ -42,24 +43,24 @@ DATA_TEST = 'data/test'
 MODEL_PATH = 'vad_st.pt'
 SAVE_MODEL = True
 
-USE_KALDI = False
 USE_WPL = False
-DATA_TRAIN_KALDI = 'data/train'
-DATA_TEST_KALDI = 'data/test'
+NUM_WORKERS = 4
 
-# legend: scores[0,:] -> scores_stream, 1 -> scores_kron, 2 -> scores_lin
+# Selects which of the scoring methods should be used...
+# legend: scores[0,:] -> baseline, 1 -> partially-constant, 2 -> linearly-interpolated
 SCORE_TYPE = 0
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 WPL_WEIGHTS = torch.tensor([1.0, 0.1, 1.0]).to(device)
 
 class VadSTDatasetArk(Dataset):
-    """VadST training dataset. Uses kaldi scp and ark files."""
+    """VadST dataset class. Uses kaldi scp and ark files."""
 
     def __init__(self, root_dir, score_type):
         self.root_dir = root_dir
         self.score_type = score_type
 
+        # load the scp files...
         self.fbanks = kaldiio.load_scp(f'{self.root_dir}/fbanks.scp')
         self.scores = kaldiio.load_scp(f'{self.root_dir}/scores.scp')
         self.labels = kaldiio.load_scp(f'{self.root_dir}/labels.scp')
@@ -81,87 +82,47 @@ class VadSTDatasetArk(Dataset):
         y = torch.from_numpy(y).long()
         return x, y
 
-class VadSTDataset(Dataset):
-    """VadST training dataset."""
-
-    def __init__(self, root_dir):
-        """Initializes the dataset object and loads the paths to the feature files into
-        the file_list attribute.
-
-        Args:
-            root_dir (str): Path to the root directory of the dataset. In this folder,
-                there can be several other folders containing the data.
-        """
-
-        self.file_list = list()
-
-        # first load the paths to the feature files
-        with os.scandir(root_dir) as folders:
-            for folder in folders:
-                self.file_list.extend(glob(folder.path + '/*.fea.npz'))
-        self.n_utterances = len(self.file_list)
-
-    def __len__(self):
-        return self.n_utterances
-
-    def __getitem__(self, index):
-        with np.load(self.file_list[index]) as f:
-            x = f['x']
-            scores = f['scores']
-            y = f['y']
-
-            # add the speaker verification scores array to the feature vector
-            x = np.hstack((x, np.expand_dims(scores, 1)))
-
-            x = torch.from_numpy(x).float()
-            y = torch.from_numpy(y)
-            return x, y
-
-        return None
 
 if __name__ == '__main__':
-    # default data path
-    data_train = DATA_TRAIN_KALDI if USE_KALDI else DATA_TRAIN
-    data_test = DATA_TEST_KALDI if USE_KALDI else DATA_TEST
+""" Model training  """
 
     # program arguments
     parser = ap.ArgumentParser(description="Train the VAD ST model.")
-    parser.add_argument('--train_dir', type=str, default=data_train)
-    parser.add_argument('--test_dir', type=str, default=data_test)
+    parser.add_argument('--train_dir', type=str, default=DATA_TRAIN)
+    parser.add_argument('--test_dir', type=str, default=DATA_TEST)
     parser.add_argument('--score_type', type=int, default=SCORE_TYPE)
     parser.add_argument('--model_path', type=str, default=MODEL_PATH)
     parser.add_argument('--use_kaldi', action='store_true')
     parser.add_argument('--use_wpl', action='store_true')
     parser.add_argument('--nuse_fc', action='store_false')
+    parser.add_argument('--linear', action='store_true')
+    parser.add_argument('--nsave_model', action='store_false')
     args = parser.parse_args()
 
     MODEL_PATH = args.model_path
-    data_train = args.train_dir
-    data_test = args.test_dir
-    USE_KALDI = args.use_kaldi
+    DATA_TRAIN = args.train_dir
+    DATA_TEST = args.test_dir
     SCORE_TYPE = args.score_type
+    linear = args.linear
     USE_WPL = args.use_wpl
+    SAVE_MODEL = args.nsave_model
 
     if SCORE_TYPE not in [0, 1, 2]:
         print(f"Error: invalid scoring type: {SCORE_TYPE}. The values have to be in {0, 1, 2}.")
         sys.exit(1)
 
     # Load the data and create DataLoader instances
-    if USE_KALDI:
-        train_data = VadSTDatasetArk(data_train, SCORE_TYPE)
-        test_data = VadSTDatasetArk(data_test, SCORE_TYPE)
-    else:
-        train_data = VadSTDataset(data_train)
-        test_data = VadSTDataset(data_test)
+    train_data = VadSTDatasetArk(DATA_TRAIN, SCORE_TYPE)
+    test_data = VadSTDatasetArk(DATA_TEST, SCORE_TYPE)
 
     train_loader = DataLoader(
-            dataset=train_data, num_workers=4, pin_memory=True,
+            dataset=train_data, num_workers=NUM_WORKERS, pin_memory=True,
             batch_size=batch_size, shuffle=True, collate_fn=pad_collate)
     test_loader = DataLoader(
-            dataset=test_data, num_workers=4, pin_memory=True,
+            dataset=test_data, num_workers=NUM_WORKERS, pin_memory=True,
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
-    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc, linear=False).to(device)
+    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc, linear=linear).to(device)
 
     if USE_WPL:
         criterion = WPL(WPL_WEIGHTS)

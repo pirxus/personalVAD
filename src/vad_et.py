@@ -1,8 +1,13 @@
 """@package vad_et
 
-This module implements the ET vad architecture from {paper_link}. The input for this architecture
-consists of a 296-dimensional feature vector of which 40 values are our extracted logfbank
-energies and the other 256 values is the target speaker embedding d-vector.
+Author: Simon Sedlacek
+Email: xsedla1h@stud.fit.vutbr.cz
+
+This module implements the ET personal VAD architecture training loop.
+
+The input for this architecture is a 296-dimensional feature vector combining
+the 40-dimensional log Mel-filterbank energies and the 256-dimensional target
+speaker d-vector representation.
 
 """
 
@@ -17,14 +22,11 @@ import argparse as ap
 from sklearn.metrics import average_precision_score
 
 import numpy as np
-import pickle
 import os
-import sys
-from glob import glob
 
 from personal_vad import PersonalVAD, WPL, pad_collate
 
-# model hyper parameters
+# model and training hyperparameters
 num_epochs = 13
 batch_size = 128
 batch_size_test = 128
@@ -42,20 +44,20 @@ EMBED_PATH = 'embeddings'
 MODEL_PATH = 'vad_et.pt'
 SAVE_MODEL = True
 
-USE_KALDI = False
 USE_WPL = False
-DATA_TRAIN_KALDI = 'data/train'
-DATA_TEST_KALDI = 'data/test'
+NUM_WORKERS = 4
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 WPL_WEIGHTS = torch.tensor([1.0, 0.1, 1.0]).to(device)
 
 class VadETDatasetArk(Dataset):
-    """VadET training dataset. Uses kaldi scp and ark files."""
+    """VadET dataset class. Uses kaldi scp and ark files."""
 
     def __init__(self, root_dir, embed_path):
         self.root_dir = root_dir
         self.embed_path = embed_path
+
+        # load the scp files...
         self.fbanks = kaldiio.load_scp(f'{self.root_dir}/fbanks.scp')
         self.labels = kaldiio.load_scp(f'{self.root_dir}/labels.scp')
         self.keys = np.array(list(self.fbanks)) # get all the keys
@@ -85,85 +87,45 @@ class VadETDatasetArk(Dataset):
         y = torch.from_numpy(y).long()
         return x, y
 
-class VadETDataset(Dataset):
-    """VadET training dataset."""
-
-    def __init__(self, root_dir):
-        """Initializes the dataset object and loads the paths to the feature files into
-        the file_list attribute.
-
-        Args:
-            root_dir (str): Path to the root directory of the dataset. In this folder,
-                there can be several other folders containing the data.
-        """
-
-        self.file_list = list()
-
-        # first load the paths to the feature files
-        with os.scandir(root_dir) as folders:
-            for folder in folders:
-                self.file_list.extend(glob(folder.path + '/*.fea.npz'))
-        self.n_utterances = len(self.file_list)
-
-    def __len__(self):
-        return self.n_utterances
-
-    def __getitem__(self, index):
-        with np.load(self.file_list[index]) as f:
-            x = f['x']
-            embed = f['embed']
-            y = f['y']
-
-            # add the dvector array to the feature vector
-            x = np.hstack((x, np.full((x.shape[0], 256), embed)))
-
-            x = torch.from_numpy(x).float()
-            y = torch.from_numpy(y)
-            return x, y
-
-        return None
 
 if __name__ == '__main__':
-    # default data path
-    data_train = DATA_TRAIN_KALDI if USE_KALDI else DATA_TRAIN
-    data_test = DATA_TEST_KALDI if USE_KALDI else DATA_TEST
+""" Model training  """
 
     # program arguments
     parser = ap.ArgumentParser(description="Train the VAD ET model.")
-    parser.add_argument('--train_dir', type=str, default=data_train)
-    parser.add_argument('--test_dir', type=str, default=data_test)
+    parser.add_argument('--train_dir', type=str, default=DATA_TRAIN)
+    parser.add_argument('--test_dir', type=str, default=DATA_TEST)
     parser.add_argument('--embed_path', type=str, default=EMBED_PATH)
     parser.add_argument('--model_path', type=str, default=MODEL_PATH)
-    parser.add_argument('--wpl_weight', type=float, default=0.1)
+    parser.add_argument('--wpl_weight', type=float, default=0.5)
     parser.add_argument('--use_kaldi', action='store_true')
     parser.add_argument('--use_wpl', action='store_true')
     parser.add_argument('--nuse_fc', action='store_false')
+    parser.add_argument('--linear', action='store_true')
+    parser.add_argument('--nsave_model', action='store_false')
     args = parser.parse_args()
 
     MODEL_PATH = args.model_path
-    data_train = args.train_dir
-    data_test = args.test_dir
+    DATA_TRAIN = args.train_dir
+    DATA_TEST = args.test_dir
     EMBED_PATH = args.embed_path
-    USE_KALDI = args.use_kaldi
     USE_WPL = args.use_wpl
+    linear = args.linear
     WPL_WEIGHTS[1] = args.wpl_weight
+    SAVE_MODEL = args.nsave_model
 
     # Load the data and create DataLoader instances
-    if USE_KALDI:
-        train_data = VadETDatasetArk(data_train, EMBED_PATH)
-        test_data = VadETDatasetArk(data_test, EMBED_PATH)
-    else:
-        train_data = VadETDataset(data_train)
-        test_data = VadETDataset(data_test)
+    train_data = VadETDatasetArk(DATA_TRAIN, EMBED_PATH)
+    test_data = VadETDatasetArk(DATA_TEST, EMBED_PATH)
 
     train_loader = DataLoader(
-            dataset=train_data, num_workers=4, pin_memory=True,
+            dataset=train_data, num_workers=NUM_WORKERS, pin_memory=True,
             batch_size=batch_size, shuffle=True, collate_fn=pad_collate)
     test_loader = DataLoader(
-            dataset=test_data, num_workers=4, pin_memory=True,
+            dataset=test_data, num_workers=NUM_WORKERS, pin_memory=True,
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
-    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc, linear=True).to(device)
+    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc, linear=linear).to(device)
 
     if USE_WPL:
         print("Using the wpl.. ", WPL_WEIGHTS)

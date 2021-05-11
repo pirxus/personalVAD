@@ -1,6 +1,11 @@
 """@package vad
 
-This module implements a basic vad model.
+Author: Simon Sedlacek
+Email: xsedla1h@stud.fit.vutbr.cz
+
+This module implements the baseline VAD model training loop.
+
+The input for this architecture are the 40-dimensional log Mel-filterbank energies.
 
 """
 
@@ -16,8 +21,6 @@ from sklearn.metrics import average_precision_score
 
 import numpy as np
 import os
-import sys
-from glob import glob
 
 from personal_vad import PersonalVAD, pad_collate
 
@@ -33,29 +36,24 @@ out_dim = 2
 lr = 1e-3
 SCHEDULER = True
 
-DATA_TRAIN = 'data/features/train'
-DATA_TEST = 'data/features/test'
+DATA_TRAIN = 'data/train'
+DATA_TEST = 'data/test'
 MODEL_PATH = 'vad.pt'
 SAVE_MODEL = True
 
-USE_KALDI = False
-DATA_TRAIN_KALDI = 'data/train'
-DATA_TEST_KALDI = 'data/test'
-
-CONVERT_LABELS = True # uses the ns, tss, ntss labels and converts them to the base vad labels
+NUM_WORKERS = 4
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 class VadDatasetArk(Dataset):
-    """Vad training dataset. Uses kaldi scp and ark files."""
+    """Vad dataset class. Uses kaldi scp and ark files."""
 
     def __init__(self, root_dir):
-        self.root_dir = root_dir if root_dir[-1] == '/' else root_dir + '/'
-        self.fbanks = kaldiio.load_scp(f'{self.root_dir}fbanks.scp')
-        if CONVERT_LABELS:
-            self.labels = kaldiio.load_scp(f'{self.root_dir}labels.scp')
-        else:
-            self.labels = kaldiio.load_scp(f'{self.root_dir}labels_vad.scp')
+        self.root_dir = root_dir
+
+        # load the scp files...
+        self.fbanks = kaldiio.load_scp(f'{self.root_dir}/fbanks.scp')
+        self.labels = kaldiio.load_scp(f'{self.root_dir}/labels.scp')
         self.keys = np.array(list(self.fbanks)) # get all the keys
 
     def __len__(self):
@@ -65,84 +63,47 @@ class VadDatasetArk(Dataset):
         key = self.keys[idx]
         x = self.fbanks[key]
         y = self.labels[key]
-
-        if CONVERT_LABELS:
-            y = (y != 0).astype('int')
+        
+        # convert the PVAD labels to speech/non-speech only
+        y = (y != 0).astype('int')
 
         x = torch.from_numpy(x).float()
         y = torch.from_numpy(y).long()
         return x, y
 
-class VadDataset(Dataset):
-    """Vad training dataset."""
 
-    def __init__(self, root_dir):
-        """Initializes the dataset object and loads the paths to the feature files into
-        the file_list attribute.
-
-        Args:
-            root_dir (str): Path to the root directory of the dataset. In this folder,
-                there can be several other folders containing the data.
-        """
-
-        self.file_list = list()
-
-        # first load the paths to the feature files
-        with os.scandir(root_dir) as folders:
-            for folder in folders:
-                self.file_list.extend(glob(folder.path + '/*.vad.fea.npz'))
-        self.n_utterances = len(self.file_list)
-
-    def __len__(self):
-        return self.n_utterances
-
-    def __getitem__(self, index):
-        with np.load(self.file_list[index]) as f:
-            x = f['x']
-            y = f['y']
-
-            x = torch.from_numpy(x).float()
-            y = torch.from_numpy(y).float()
-            return x, y
-
-        return None
-
-# training process..
 if __name__ == '__main__':
-    # default data path
-    data_train = DATA_TRAIN_KALDI if USE_KALDI else DATA_TRAIN
-    data_test = DATA_TEST_KALDI if USE_KALDI else DATA_TEST
+""" Model training  """
 
     # program arguments
     parser = ap.ArgumentParser(description="Train the base VAD model.")
-    parser.add_argument('--train_dir', type=str, default=data_train)
-    parser.add_argument('--test_dir', type=str, default=data_test)
+    parser.add_argument('--train_dir', type=str, default=DATA_TRAIN)
+    parser.add_argument('--test_dir', type=str, default=DATA_TEST)
     parser.add_argument('--model_path', type=str, default=MODEL_PATH)
     parser.add_argument('--use_kaldi', action='store_true')
     parser.add_argument('--nuse_fc', action='store_false')
+    parser.add_argument('--linear', action='store_true')
+    parser.add_argument('--nsave_model', action='store_false')
     args = parser.parse_args()
 
     MODEL_PATH = args.model_path
-    data_train = args.train_dir
-    data_test = args.test_dir
-    USE_KALDI = args.use_kaldi
+    DATA_TRAIN = args.train_dir
+    linear = args.linear
+    DATA_TEST = args.test_dir
+    SAVE_MODEL = args.nsave_model
 
     # Load the data and create DataLoader instances
-    if USE_KALDI:
-        train_data = VadDatasetArk(data_train)
-        test_data = VadDatasetArk(data_test)
-    else:
-        train_data = VadDataset(data_train)
-        test_data = VadDataset(data_test)
+    train_data = VadDatasetArk(DATA_TRAIN)
+    test_data = VadDatasetArk(DATA_TEST)
 
     train_loader = DataLoader(
-            dataset=train_data, num_workers=4, pin_memory=True,
+            dataset=train_data, num_workers=NUM_WORKERS, pin_memory=True,
             batch_size=batch_size, shuffle=True, collate_fn=pad_collate)
     test_loader = DataLoader(
-            dataset=test_data, num_workers=4, pin_memory=True,
+            dataset=test_data, num_workers=NUM_WORKERS, pin_memory=True,
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
-    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc, linear=True).to(device)
+    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc, linear=linear).to(device)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)

@@ -1,3 +1,16 @@
+"""@package vad_ivector
+
+Author: Simon Sedlacek
+Email: xsedla1h@stud.fit.vutbr.cz
+
+This module implements the ET personal VAD i-vector architecture training loop.
+
+The input for this architecture is a 440-dimensional feature vector combining
+the 40-dimensional log Mel-filterbank energies and the 400-dimensional target
+speaker i-vector representation.
+
+"""
+
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
@@ -10,10 +23,7 @@ import argparse as ap
 from sklearn.metrics import average_precision_score
 
 import numpy as np
-import pickle
 import os
-import sys
-from glob import glob
 
 from personal_vad import PersonalVAD, WPL, pad_collate
 
@@ -35,21 +45,20 @@ EMBED_PATH = 'embeddings'
 MODEL_PATH = 'vad_et.pt'
 SAVE_MODEL = True
 
-USE_KALDI = False
 USE_WPL = False
-MULTI_GPU = False
-DATA_TRAIN_KALDI = 'data/train'
-DATA_TEST_KALDI = 'data/test'
+NUM_WORKERS = 4
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 WPL_WEIGHTS = torch.tensor([1.0, 0.1, 1.0]).to(device)
 
 class VadETDatasetArkI(Dataset):
-    """VadET training dataset. Uses kaldi scp and ark files."""
+    """VadET i-vector dataset class. Uses kaldi scp and ark files."""
 
     def __init__(self, root_dir, embed_path):
         self.root_dir = root_dir
         self.embed_path = embed_path
+
+        # load the scp files...
         self.fbanks = kaldiio.load_scp(f'{self.root_dir}/fbanks.scp')
         self.labels = kaldiio.load_scp(f'{self.root_dir}/labels.scp')
         self.keys = np.array(list(self.fbanks)) # get all the keys
@@ -79,47 +88,45 @@ class VadETDatasetArkI(Dataset):
         y = torch.from_numpy(y).long()
         return x, y
 
+
 if __name__ == '__main__':
-    # default data path
-    data_train = DATA_TRAIN_KALDI if USE_KALDI else DATA_TRAIN
-    data_test = DATA_TEST_KALDI if USE_KALDI else DATA_TEST
+""" Model training  """
 
     # program arguments
-    parser = ap.ArgumentParser(description="Train the VAD ET model.")
-    parser.add_argument('--train_dir', type=str, default=data_train)
-    parser.add_argument('--test_dir', type=str, default=data_test)
+    parser = ap.ArgumentParser(description="Train the VAD ET i-vector model.")
+    parser.add_argument('--train_dir', type=str, default=DATA_TRAIN)
+    parser.add_argument('--test_dir', type=str, default=DATA_TEST)
     parser.add_argument('--embed_path', type=str, default=EMBED_PATH)
     parser.add_argument('--model_path', type=str, default=MODEL_PATH)
     parser.add_argument('--use_kaldi', action='store_true')
     parser.add_argument('--wpl_weight', type=float, default=0.1)
     parser.add_argument('--use_wpl', action='store_true')
     parser.add_argument('--nuse_fc', action='store_false')
+    parser.add_argument('--linear', action='store_true')
+    parser.add_argument('--nsave_model', action='store_false')
     args = parser.parse_args()
 
     MODEL_PATH = args.model_path
-    data_train = args.train_dir
-    data_test = args.test_dir
+    DATA_TRAIN = args.train_dir
+    DATA_TEST = args.test_dir
     EMBED_PATH = args.embed_path
-    USE_KALDI = args.use_kaldi
     USE_WPL = args.use_wpl
+    linear = args.linear
     WPL_WEIGHTS[1] = args.wpl_weight
+    SAVE_MODEL = args.nsave_model
 
     # Load the data and create DataLoader instances
-    if USE_KALDI:
-        train_data = VadETDatasetArkI(data_train, EMBED_PATH)
-        test_data = VadETDatasetArkI(data_test, EMBED_PATH)
-    else:
-        train_data = VadETDataset(data_train)
-        test_data = VadETDataset(data_test)
+    train_data = VadETDatasetArkI(DATA_TRAIN, EMBED_PATH)
+    test_data = VadETDatasetArkI(DATA_TEST, EMBED_PATH)
 
     train_loader = DataLoader(
-            dataset=train_data, num_workers=4, pin_memory=True,
+            dataset=train_data, num_workers=NUM_WORKERS, pin_memory=True,
             batch_size=batch_size, shuffle=True, collate_fn=pad_collate)
     test_loader = DataLoader(
-            dataset=test_data, num_workers=4, pin_memory=True,
+            dataset=test_data, num_workers=NUM_WORKERS, pin_memory=True,
             batch_size=batch_size_test, shuffle=False, collate_fn=pad_collate)
 
-    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc, linear=True).to(device)
+    model = PersonalVAD(input_dim, hidden_dim, num_layers, out_dim, use_fc=args.nuse_fc, linear=linear).to(device)
 
     if USE_WPL:
         criterion = WPL(WPL_WEIGHTS)
