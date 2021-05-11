@@ -3,11 +3,11 @@ from copy import copy
 import torch
 
 from personal_vad import PersonalVAD, pad_collate
-from vad_et import VadETDatasetArk
-from vad_set import VadSETDatasetArk
-from vad_st import VadSTDatasetArk
-from vad_xvector import VadETDatasetArkX
-from vad_ivector import VadETDatasetArkI
+from vad_et import VadETDataset
+from vad_set import VadSETDataset
+from vad_st import VadSTDataset
+from vad_xvector import VadETDatasetX
+from vad_ivector import VadETDatasetI
 from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pack_padded_sequence
 from sklearn.metrics import average_precision_score, confusion_matrix, precision_score, accuracy_score
@@ -107,25 +107,25 @@ for model in models:
 
     if arch == 'et':
         if embed == 'dvec':
-            test_data = VadETDatasetArk(data, 'embeddings')
+            test_data = VadETDataset(data, 'embeddings')
         elif embed == 'xvec':
-            test_data = VadETDatasetArkX(data, 'embeddings_xvec_l2_non_negative')
+            test_data = VadETDatasetX(data, 'embeddings_xvec_l2_non_negative')
         else: # ivec
             if 'l2' in model:
-                test_data = VadETDatasetArkI(data, 'l2_normed')
+                test_data = VadETDatasetI(data, 'l2_normed')
             else:
-                test_data = VadETDatasetArkI(data, 'regular')
+                test_data = VadETDatasetI(data, 'regular')
 
     elif arch == 'set':
-        test_data = VadSETDatasetArk(data, 'embeddings', score_type)
+        test_data = VadSETDataset(data, 'embeddings', score_type)
 
     elif arch == 'st':
-        test_data = VadSTDatasetArk(data, score_type)
+        test_data = VadSTDataset(data, score_type)
             
     elif arch == 'xv':
         model = PersonalVAD(input_dim=552, hidden_dim=64, num_layers=2, out_dim=3)
         model.load_state_dict(torch.load('models/vad_et_7ep_xvec.pt'))
-        test_data = VadETDatasetArkX(data, 'embeddings_xvec')
+        test_data = VadETDatasetX(data, 'embeddings_xvec')
         
     else:
         # we should not get here

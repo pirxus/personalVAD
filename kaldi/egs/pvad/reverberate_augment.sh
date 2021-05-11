@@ -1,4 +1,25 @@
 #!/bin/bash
+#
+# File: reverberate_augment.sh
+# Author: Simon Sedlacek
+# Email: xsedla1h@stud.fit.vutbr.cz
+#
+# This script handles Kaldi data reverberation and agumentation. It is supposed to be
+# invoked by the prepare_dataset_features.sh script from the root directory of the
+# project.
+#
+# The reverberation and MUSAN augmentation in this script was based on the reverberation
+# and augmentation approaches from the run.sh script from the Kaldi SITW v2 recipe, which
+# is available here: https://github.com/kaldi-asr/kaldi/blob/master/egs/sitw/v2/run.sh
+# 
+
+#================ EDIT HERE =========================
+
+use_noise=true
+use_music=true
+use_babble=false
+
+#====================================================
 
 # first, setup the NAME variable
 if [ -z ${NAME+x} ]; then
@@ -7,15 +28,12 @@ fi
 
 red=`tput setaf 1`
 green=`tput setaf 2`
+magenta=`tput setaf 5`
 reset=`tput sgr0`
 
 train_cmd="run.pl"
 decode_cmd="run.pl"
 musan_root=musan
-
-use_noise=true
-use_music=true
-use_babble=false
 
 if [ -e $1 ]; then
   echo "Please specifiy the data preparation stage."
@@ -24,15 +42,17 @@ else
   stage=$1
 fi
 
-if [ ! -d "RIRS_NOISES" ]; then
-  # Download and unzip the rirs 
-  if [ ! -f "rirs_noises.zip" ]; then
-    wget --no-check-certificate http://www.openslr.org/resources/28/rirs_noises.zip
-  fi
-  unzip rirs_noises.zip
-fi
-
 if [ $stage -le 0 ]; then
+
+  # Download and unzip the rirs_noises corpus if missing
+  if [ ! -d "RIRS_NOISES" ]; then
+    if [ ! -f "rirs_noises.zip" ]; then
+      echo "${magenta}Downloading and unzipping rirs_noises${magenta}"
+      wget --no-check-certificate http://www.openslr.org/resources/28/rirs_noises.zip
+    fi
+    unzip rirs_noises.zip
+  fi
+
   echo "${green}Reverberating the dataset...${reset}"
    # Make a version with reverberated speech
   rvb_opts=()
@@ -56,6 +76,17 @@ if [ $stage -le 0 ]; then
 fi
 
 if [ $stage -le 1 ]; then
+
+  if [ ! -d "musan" ]; then
+    # Download and unzip musan, if missing
+    if [ ! -f "musan.tar.gz" ]; then
+      echo "${magenta}Downloading and unzipping musan${magenta}"
+      wget --no-check-certificate https://www.openslr.org/resources/17/musan.tar.gz
+    fi
+    tar -xf musan.tar.gz
+    rm musan.tar.gz
+  fi
+
   echo "${green}Augmenting the dataset...${reset}"
 
   # prepare musan
@@ -76,7 +107,7 @@ if [ $stage -le 1 ]; then
   if $use_music; then
     steps/data/augment_data_dir.py --utt-suffix "music" --bg-snrs "15:10:8:5" --num-bg-noises "1" --bg-noise-dir "data/musan_music" data/$NAME data/music
   fi
-  # speech TODO: can this be used for overlapping speech???
+  # speech
   if $use_babble; then
     steps/data/augment_data_dir.py --utt-suffix "babble" --bg-snrs "20:17:15:13" --num-bg-noises "3:4:5:6:7" --bg-noise-dir "data/musan_speech" data/$NAME data/babble
   fi

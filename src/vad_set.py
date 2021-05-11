@@ -29,8 +29,8 @@ from personal_vad import PersonalVAD, WPL, pad_collate
 
 # model hyper parameters
 num_epochs = 10
-batch_size = 128
-batch_size_test = 128
+batch_size = 64
+batch_size_test = 64
 
 input_dim = 297
 hidden_dim = 64
@@ -46,7 +46,7 @@ MODEL_PATH = 'vad_set.pt'
 SAVE_MODEL = True
 
 USE_WPL = False
-NUM_WORKERS = 4
+NUM_WORKERS = 2
 
 # Selects which of the scoring methods should be used...
 # legend: scores[0,:] -> baseline, 1 -> partially-constant, 2 -> linearly-interpolated
@@ -55,7 +55,7 @@ SCORE_TYPE = 0
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 WPL_WEIGHTS = torch.tensor([1.0, 0.1, 1.0]).to(device)
 
-class VadSETDatasetArk(Dataset):
+class VadSETDataset(Dataset):
     """VadSET dataset class. Uses kaldi scp and ark files."""
 
     def __init__(self, root_dir, embed_path, score_type):
@@ -100,7 +100,7 @@ class VadSETDatasetArk(Dataset):
 
 
 if __name__ == '__main__':
-""" Model training  """
+    """ Model training  """
 
     # program arguments
     parser = ap.ArgumentParser(description="Train the VAD SET model.")
@@ -130,8 +130,8 @@ if __name__ == '__main__':
         sys.exit(1)
 
     # Load the data and create DataLoader instances
-    train_data = VadSETDatasetArk(DATA_TRAIN, EMBED_PATH, SCORE_TYPE)
-    test_data = VadSETDatasetArk(DATA_TEST, EMBED_PATH, SCORE_TYPE)
+    train_data = VadSETDataset(DATA_TRAIN, EMBED_PATH, SCORE_TYPE)
+    test_data = VadSETDataset(DATA_TEST, EMBED_PATH, SCORE_TYPE)
 
     train_loader = DataLoader(
             dataset=train_data, num_workers=NUM_WORKERS, pin_memory=True,

@@ -26,8 +26,8 @@ from personal_vad import PersonalVAD, pad_collate
 
 # model hyper parameters
 num_epochs = 6
-batch_size = 128
-batch_size_test = 128
+batch_size = 64
+batch_size_test = 64
 
 input_dim = 40
 hidden_dim = 64
@@ -41,11 +41,11 @@ DATA_TEST = 'data/test'
 MODEL_PATH = 'vad.pt'
 SAVE_MODEL = True
 
-NUM_WORKERS = 4
+NUM_WORKERS = 2
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-class VadDatasetArk(Dataset):
+class VadDataset(Dataset):
     """Vad dataset class. Uses kaldi scp and ark files."""
 
     def __init__(self, root_dir):
@@ -73,7 +73,7 @@ class VadDatasetArk(Dataset):
 
 
 if __name__ == '__main__':
-""" Model training  """
+    """ Model training  """
 
     # program arguments
     parser = ap.ArgumentParser(description="Train the base VAD model.")
@@ -93,8 +93,8 @@ if __name__ == '__main__':
     SAVE_MODEL = args.nsave_model
 
     # Load the data and create DataLoader instances
-    train_data = VadDatasetArk(DATA_TRAIN)
-    test_data = VadDatasetArk(DATA_TEST)
+    train_data = VadDataset(DATA_TRAIN)
+    test_data = VadDataset(DATA_TEST)
 
     train_loader = DataLoader(
             dataset=train_data, num_workers=NUM_WORKERS, pin_memory=True,

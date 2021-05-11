@@ -29,8 +29,8 @@ from personal_vad import PersonalVAD, WPL, pad_collate
 
 # model hyper parameters
 num_epochs = 10
-batch_size = 64
-batch_size_test = 64
+batch_size = 32
+batch_size_test = 32
 
 input_dim = 552
 hidden_dim = 64
@@ -46,12 +46,12 @@ MODEL_PATH = 'vad_et.pt'
 SAVE_MODEL = True
 
 USE_WPL = False
-NUM_WORKERS = 4
+NUM_WORKERS = 2
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 WPL_WEIGHTS = torch.tensor([1.0, 0.1, 1.0]).to(device)
 
-class VadETDatasetArkX(Dataset):
+class VadETDatasetX(Dataset):
     """VadET x-vector dataset class. Uses kaldi scp and ark files."""
 
     def __init__(self, root_dir, embed_path):
@@ -90,7 +90,7 @@ class VadETDatasetArkX(Dataset):
 
 
 if __name__ == '__main__':
-""" Model training  """
+    """ Model training  """
 
     # program arguments
     parser = ap.ArgumentParser(description="Train the VAD ET x-vector model.")
@@ -116,8 +116,8 @@ if __name__ == '__main__':
     SAVE_MODEL = args.nsave_model
 
     # Load the data and create DataLoader instances
-    train_data = VadETDatasetArkX(DATA_TRAIN, EMBED_PATH)
-    test_data = VadETDatasetArkX(DATA_TEST, EMBED_PATH)
+    train_data = VadETDatasetX(DATA_TRAIN, EMBED_PATH)
+    test_data = VadETDatasetX(DATA_TEST, EMBED_PATH)
 
     train_loader = DataLoader(
             dataset=train_data, num_workers=NUM_WORKERS, pin_memory=True,
