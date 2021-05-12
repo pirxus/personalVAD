@@ -39,8 +39,8 @@ fi
 
 # move to the eval directory..
 BASE=$PWD
-TRAIN_NAME=test_clean
-TEST_NAME=test_clean
+TRAIN_NAME=test
+TEST_NAME=test
 cd data/eval_dir
 
 if [[ $arch == "vad" ]]; then

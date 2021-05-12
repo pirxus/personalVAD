@@ -13,7 +13,7 @@ confusion matrix is computed.
 
 The results are written to stdout.
 
-$ python src/evaluate_models.py 2>/dev/null
+Usage: python src/evaluate_models.py 2>/dev/null
 
 """
 
@@ -34,7 +34,6 @@ from sklearn.metrics import average_precision_score, confusion_matrix, \
 import kaldiio
 import os
 import sys
-import ml_metrics as metrics
 from glob import glob
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -179,7 +178,8 @@ if __name__ == '__main__':
             # we should not get here
             continue
 
-        test_loader = DataLoader(dataset=test_data, batch_size=batch_size_test, num_workers=2, shuffle=False, collate_fn=pad_collate)
+        test_loader = DataLoader(dataset=test_data, batch_size=batch_size_test,
+                num_workers=2, shuffle=False, collate_fn=pad_collate)
 
         # set the device to cuda and move the model to the gpu
         device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')

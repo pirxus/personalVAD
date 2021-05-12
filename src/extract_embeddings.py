@@ -19,12 +19,12 @@ from kaldiio import WriteHelper
 from resemblyzer import VoiceEncoder, preprocess_wav, normalize_volume
 from speechbrain.pretrained import SpeakerRecognition
 
-LIBRI_ROOT = 'LibriSpeech'
-DEST = 'embeddings'
-DIRECTORIES = ['dev-clean', 'dev-other', 'test-clean', 'test-other',
-               'train-clean-100', 'train-clean-360', 'train-other-500']
+LIBRI_ROOT = 'data/LibriSpeech'
+DEST = 'data/embeddings'
+DIRECTORIES = ['dev-clean']#, 'dev-other', 'test-clean', 'test-other',
+               #'train-clean-100', 'train-clean-360', 'train-other-500']
 
-N_WAVS = 2
+N_WAVS = 3
 
 # command line arguments
 parser = ap.ArgumentParser(description="Extract speaker embeddings for the LibriSpeech dataset.")

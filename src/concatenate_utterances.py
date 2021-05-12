@@ -280,7 +280,7 @@ if __name__ == '__main__':
     if os.path.exists(dest):
         if not os.path.isdir(dest) or os.listdir(dest):
             print('The specified destination folder is an existing file/directory')
-            sys.exit()
+            sys.exit(1)
     else:
         try:
             os.mkdir(dest)
