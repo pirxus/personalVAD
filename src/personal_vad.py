@@ -146,8 +146,8 @@ def pad_collate(batch):
     Returns:
         tuple: A tuple containing:
             
-            xx_pad (torch.tensor): Padded feature vector.
-            yy_pad (torch.tensor): Padded ground truth vector.
+            x_padded (torch.tensor): Padded feature vector.
+            y_padded (torch.tensor): Padded ground truth vector.
             x_lens (torch.tensor): Lengths of the original feature vectors within the batch.
             y_lens (torch.tensor): Lengths of the original ground truth vectors within the batch.
     """
@@ -156,8 +156,8 @@ def pad_collate(batch):
     x_lens = [len(x) for x in xx]
     y_lens = [len(y) for y in yy]
 
-    xx_pad = pad_sequence(xx, batch_first=True, padding_value=0)
-    yy_pad = pad_sequence(yy, batch_first=True, padding_value=0)
-    # NOTE: yy_padding is not necessary in this case....
+    x_padded = pad_sequence(xx, batch_first=True, padding_value=0)
+    y_padded = pad_sequence(yy, batch_first=True, padding_value=0)
+    # NOTE: yy padding is not necessary in this case....
 
-    return xx_pad, yy_pad, x_lens, y_lens
+    return x_padded, y_padded, x_lens, y_lens

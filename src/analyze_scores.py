@@ -1,5 +1,11 @@
-""" This little script analyzes the score values extracted using the full-on frame-level approach
-vs the window-level approach
+"""@package analyze_scores
+
+Author: Simon Sedlacek
+Email: xsedla1h@stud.fit.vutbr.cz
+
+This script analyzes the score values extracted using the frame-level approach
+and compares them against the scores obtained using the window-level approach.
+
 """
 
 import numpy as np
@@ -25,40 +31,8 @@ scores_scp = kaldiio.load_scp('scores.scp')
 labels_scp = kaldiio.load_scp('labels.scp')
 keys = np.array(list(scores_scp))
 
-# scoring method comparison plot
 
-# get a suitable utterance with three speakers
-"""
-for i, key in enumerate(keys):
-    if key.count('_') == 2 and key.rpartition('_')[2] not in ['music', 'noise', 'reverb']:
-        if i == 20:
-            break
-        else:
-            i += 1
-
-scores = scores_scp[key]
-labels = labels_scp[key]
-
-fig = plt.figure(figsize=(10,4))
-stop = -250
-
-plt.plot(scores[0,:stop], label='baseline')
-plt.plot(scores[1,:stop], label='partially-constant', linewidth=2.0)
-plt.plot(scores[2,:stop], label='linearly-interpolated')
-index = np.argmax(labels == 1.0)
-plt.fill_between(np.arange(index), labels[:index]*0.5, step='pre', alpha=0.1)
-plt.fill_between(np.arange(index, labels.size + stop), labels[index:stop], step='pre', alpha=0.1)
-
-plt.ylim(0.4, 0.9)
-plt.legend(loc="upper right", title='Scoring method')
-plt.xlabel('Frame number')
-plt.ylabel('Cosine similarity score')
-plt.title('Scoring method comparison')
-plt.show()
-"""
-
-# dvector extraction method comparisons
-
+# ====== dvector extraction method comparisons ===========
 tss = [[], []]
 ntss = [[], []]
 ns = [[], []]
@@ -139,9 +113,8 @@ plt.xlabel('False Positive Rate')
 plt.ylabel('True Positive Rate')
 plt.title('Scoring method ROC comparison')
 plt.legend(loc="lower right")
-plt.savefig('roc.pdf')
-#plt.show()
-
+#plt.savefig('roc.pdf')
+plt.show()
 
 
 print(f"tss mean = {tss_mean[0]}, {tss_mean[1]}; tss var = {tss_var[0]}, {tss_var[1]}")
@@ -198,6 +171,6 @@ ax2.set(xlabel='Cosine similarity score', title='Non-target speaker speech')
 #ax3.set(xlabel='', title='ns: frame-level (blue) vs. window-level (red)')
 #ax4.set(xlabel='', title='frame-level: tss (blue) vs. ntss (red) vs. ns (green)')
 #ax5.set(xlabel='cosine distance', title='window-level: tss (blue) vs. ntss (red) vs. ns (green)')
-plt.savefig('scores_histogram.pdf')
+#plt.savefig('scores_histogram.pdf')
 
 plt.show()
