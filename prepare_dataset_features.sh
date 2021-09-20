@@ -27,11 +27,11 @@
 #================ EDIT HERE =========================
 
 # some data-prep flags..
-AUGMENT=false # indicates, whether to peform augmentation. Kaldi has to be set up first.
+AUGMENT=true # indicates, whether to peform augmentation. Kaldi has to be set up first.
 repo_root=$PWD #NOTE: you can change this to match your system...
 KALDI=$repo_root/kaldi
 nj_features=4 # number of CPU workers used for feature extraction
-utt_count=500 # the number of generated utterances
+utt_count=20 # the number of generated utterances
 kaldi_root=$repo_root/kaldi/egs/pvad # only valid if Kaldi is set up..
 feature_dir_name=features_demo # change this to whatever you want your feature dir to be named...
 
