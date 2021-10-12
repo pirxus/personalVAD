@@ -7,7 +7,7 @@ introduced in the *PersonalVAD: Speaker-Conditioned Voice Activity Detection* pa
 below.
 
 This project was done as a part of my bachelor's thesis project:
-SEDLÁČEK, Šimon. *Personal Voice Activity Detection.* Brno, 2021. Bachelor’s thesis. Brno University of Technology, Faculty of Information Technology. Supervisor Ing. JánŠvec
+SEDLÁČEK, Šimon. *Personal Voice Activity Detection.* Brno, 2021. Bachelor’s thesis. Brno University of Technology, Faculty of Information Technology. Supervisor Ing. Ján Švec
 
 #### Paper reference
 ```
@@ -57,6 +57,10 @@ IMPORTANT! Before running any of the data prep or evaluation scripts, please mak
 you have a cuda-compatible GPU available on the current system. Otherwise, both feature
 extraction and model evaluation will take much longer to execute.
 All scripts are meant to be run from the *repository root folder*.
+
+### Trained models and sample dataset
+You can download an ~800MB version of this repository, which contains all the trained
+models and a small demo dastaset from this address: https://nextcloud.fit.vutbr.cz/s/xSRBxZmmAJJMHNe
 
 ### Prerequisites
 Before using any of the included software, please make sure to download all the necessary Python
