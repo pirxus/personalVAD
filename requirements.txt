@@ -44,5 +44,5 @@ torchaudio==0.8.1
 tqdm==4.60.0
 typing==3.7.4.3
 typing-extensions==3.10.0.0
-urllib3==1.26.4
+urllib3==1.26.5
 webrtcvad==2.0.10
